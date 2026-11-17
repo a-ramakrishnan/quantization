@@ -26,10 +26,12 @@ import {
 } from './utils/quantization';
 import { PIPELINE_STEPS } from './data/pipelineSteps';
 import { GpuArchitecture } from './components/GpuArchitecture';
+import { GpuBoxBreakdown } from './components/GpuBoxBreakdown';
 import { MatrixPipeline } from './components/MatrixPipeline';
 import { NumberLineVisualizer } from './components/NumberLineVisualizer';
 import { MathBreakdown } from './components/MathBreakdown';
 import { ForwardPassPanel } from './components/ForwardPassPanel';
+import { TensorJourneyPanel } from './components/TensorJourneyPanel';
 import { AboutModal } from './components/AboutModal';
 
 const TIMELINE_STAGES = [
@@ -68,6 +70,7 @@ export function App() {
   const [highestStage, setHighestStage] = useState<number>(0);
   const [showAllMode, setShowAllMode] = useState<boolean>(false);
   const [gpuSubStep, setGpuSubStep] = useState<number>(4); // 2=HBM, 3=SRAM, 4=Registers
+  const [gpuViewMode, setGpuViewMode] = useState<'breakdown' | 'reconstructed'>('breakdown');
 
   const [presetKey, setPresetKey] = useState<PresetKey>('outliers');
   const [weights, setWeights] = useState<number[][]>(() =>
@@ -662,6 +665,11 @@ export function App() {
               </div>
             </div>
 
+            <TensorJourneyPanel
+              activeRowWeights={weights[selectedPos.row] ?? weights[0]}
+              activeRowIndex={selectedPos.row}
+            />
+
             {!showAllMode && (
               <div className="flex items-center justify-between pt-1">
                 <button
@@ -694,40 +702,77 @@ export function App() {
                   Stage 3: GPU Memory Hierarchy &amp; On-the-Fly Dequantization
                 </h2>
                 {!showAllMode && (
-                  <div className="flex items-center gap-1.5">
-                    {[
-                      { step: 2, label: '3a. Store in HBM' },
-                      { step: 3, label: '3b. Stream to SRAM' },
-                      { step: 4, label: '3c. Dequant in Registers' },
-                    ].map((s) => (
-                      <button
-                        key={s.step}
-                        type="button"
-                        onClick={() => setGpuSubStep(s.step)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                          gpuSubStep === s.step
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setGpuViewMode('breakdown')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                        gpuViewMode === 'breakdown'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      Break Down Boxes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGpuViewMode('reconstructed')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                        gpuViewMode === 'reconstructed'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      Reconstruct Together
+                    </button>
+                    {gpuViewMode === 'reconstructed' &&
+                      [
+                        { step: 2, label: 'HBM' },
+                        { step: 3, label: 'SRAM' },
+                        { step: 4, label: 'Registers' },
+                      ].map((s) => (
+                        <button
+                          key={s.step}
+                          type="button"
+                          onClick={() => setGpuSubStep(s.step)}
+                          className={`px-2 py-1 rounded-lg text-xs font-medium transition ${
+                            gpuSubStep === s.step
+                              ? 'bg-indigo-500 text-white'
+                              : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
                   </div>
                 )}
               </div>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                {PIPELINE_STEPS[activeGpuStep]?.explanation}
+                {gpuViewMode === 'breakdown' && !showAllMode
+                  ? 'Inspect each hardware box independently to see how your weight row changes inside it, then reconstruct all boxes together into the full GPU architecture.'
+                  : PIPELINE_STEPS[activeGpuStep]?.explanation}
               </p>
             </div>
 
-            <GpuArchitecture
-              activeStep={activeGpuStep}
-              config={config}
-              result={result}
-              selectedCell={selectedCell}
-              inputs={inputs}
-            />
+            {(showAllMode || gpuViewMode === 'breakdown') && (
+              <GpuBoxBreakdown
+                config={config}
+                result={result}
+                selectedCell={selectedCell}
+                inputs={inputs}
+                onReconstructAll={() => setGpuViewMode('reconstructed')}
+              />
+            )}
+
+            {(showAllMode || gpuViewMode === 'reconstructed') && (
+              <GpuArchitecture
+                activeStep={activeGpuStep}
+                config={config}
+                result={result}
+                selectedCell={selectedCell}
+                inputs={inputs}
+              />
+            )}
 
             <MatrixPipeline
               weights={weights}

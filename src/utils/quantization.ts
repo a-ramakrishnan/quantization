@@ -295,3 +295,59 @@ export function generateRandomWeights(): number[][] {
     Array.from({ length: 4 }, () => Number(((Math.random() - 0.5) * 3.0).toFixed(2)))
   );
 }
+
+/**
+ * Simulate IEEE-754 float16 (1 sign, 5 exp, 10 mantissa) precision loss.
+ */
+export function toFp16Approx(val: number): number {
+  if (val === 0 || !Number.isFinite(val)) return val;
+  const f32 = new Float32Array(1);
+  const u32 = new Uint32Array(f32.buffer);
+  f32[0] = val;
+  const bits = u32[0];
+  const sign = (bits >>> 31) & 1;
+  const exp = ((bits >>> 23) & 0xff) - 127 + 15;
+  const mant = bits & 0x7fffff;
+
+  if (exp <= 0) return sign ? -0 : 0;
+  if (exp >= 31) return sign ? -65504 : 65504;
+
+  // Round 23-bit mantissa to 10-bit mantissa
+  const roundedMant = Math.round(mant / (1 << 13));
+  const finalExp = exp + (roundedMant >= 1024 ? 1 : 0);
+  const finalMant = roundedMant & 0x3ff;
+  const reconstructed =
+    (sign ? -1 : 1) * Math.pow(2, finalExp - 15) * (1 + finalMant / 1024);
+  return reconstructed;
+}
+
+/**
+ * Simulate bfloat16 (1 sign, 8 exp, 7 mantissa) precision loss.
+ */
+export function toBfloat16Approx(val: number): number {
+  if (val === 0 || !Number.isFinite(val)) return val;
+  const f32 = new Float32Array(1);
+  const u32 = new Uint32Array(f32.buffer);
+  f32[0] = val;
+  // Round-to-nearest-even on lower 16 bits of FP32
+  const roundingBias = 0x7fff + ((u32[0] >>> 16) & 1);
+  u32[0] = (u32[0] + roundingBias) & 0xffff0000;
+  return f32[0];
+}
+
+/**
+ * Convert signed integer to two's-complement binary string of `bits` length.
+ */
+export function toTwosComplementBits(val: number, bits: number): string {
+  const mask = (1 << bits) - 1;
+  const unsigned = val & mask;
+  return unsigned.toString(2).padStart(bits, '0');
+}
+
+/**
+ * Pack two signed 4-bit integers into a single hex byte (high nibble = first).
+ */
+export function packInt4PairToHex(hi: number, lo: number): string {
+  const byteVal = ((hi & 0xf) << 4) | (lo & 0xf);
+  return `0x${byteVal.toString(16).toUpperCase().padStart(2, '0')}`;
+}
