@@ -1,37 +1,194 @@
-@import "tailwindcss";
+/*
+ * Tailwind v4 entry: config lives here, with no tailwind.config.js or PostCSS plugin.
+ * - Keep every @import in this top block, above @theme and the rest of the file. Install an
+ *   npm package before @importing its CSS. Never @import a remote URL (web fonts, CDN CSS): the
+ *   build resolves @import from the filesystem. Load those with a <link> in the head() of
+ *   src/routes/__root.tsx and name the family in a --font-* token in @theme inline below.
+ */
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
 
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system definition.
+ *
+ * The design lives in this file: oklch color tokens on the shadcn variables
+ * (--background, --foreground, --primary, --secondary, --muted, --accent, ...) plus
+ * new tokens as needed, font tokens, and custom styles and animations.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
+@theme inline {
+  --color-theater: var(--theater);
+  --color-theater-ink: var(--theater-ink);
+  --color-theater-muted: var(--theater-muted);
+  --color-theater-grid: var(--theater-grid);
+  --color-theater-blue: var(--theater-blue);
+  --color-theater-gold: var(--theater-gold);
+  --color-theater-green: var(--theater-green);
+  --color-theater-rose: var(--theater-rose);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --theater: oklch(0.13 0.003 260);
+  --theater-ink: oklch(0.94 0.006 90);
+  --theater-muted: oklch(0.67 0.01 260);
+  --theater-grid: oklch(0.26 0.006 260);
+  --theater-blue: oklch(0.76 0.12 235);
+  --theater-gold: oklch(0.85 0.15 95);
+  --theater-green: oklch(0.8 0.12 165);
+  --theater-rose: oklch(0.75 0.14 15);
+  --radius: 0.5rem;
+  --background: oklch(0.985 0.004 85);
+  --foreground: oklch(0.22 0.02 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 260);
+  --primary: oklch(0.5 0.16 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.955 0.008 85);
+  --secondary-foreground: oklch(0.25 0.02 260);
+  --muted: oklch(0.955 0.008 85);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --accent: oklch(0.94 0.03 255);
+  --accent-foreground: oklch(0.35 0.12 255);
+  --destructive: oklch(0.58 0.2 20);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.9 0.008 85);
+  --input: oklch(0.9 0.008 85);
+  --ring: oklch(0.5 0.16 255);
+  --heat-pos: oklch(0.55 0.17 255);
+  --heat-neg: oklch(0.6 0.19 15);
+  --clip: oklch(0.75 0.16 70);
+  --bit-sign: oklch(0.62 0.19 15);
+  --bit-exp: oklch(0.6 0.14 160);
+  --bit-man: oklch(0.55 0.16 255);
+  --shadow-card: 0 1px 2px oklch(0.2 0.02 260 / 5%), 0 8px 24px -12px oklch(0.2 0.02 260 / 12%);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: var(--card); --sidebar-foreground: var(--foreground); --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground); --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground); --sidebar-border: var(--border); --sidebar-ring: var(--ring);
+}
+
+.dark {
+  --background: oklch(0.17 0.012 260);
+  --foreground: oklch(0.94 0.005 85);
+  --card: oklch(0.21 0.014 260);
+  --card-foreground: oklch(0.94 0.005 85);
+  --popover: oklch(0.21 0.014 260);
+  --popover-foreground: oklch(0.94 0.005 85);
+  --primary: oklch(0.7 0.14 255);
+  --primary-foreground: oklch(0.17 0.02 260);
+  --secondary: oklch(0.26 0.014 260);
+  --secondary-foreground: oklch(0.94 0.005 85);
+  --muted: oklch(0.26 0.014 260);
+  --muted-foreground: oklch(0.68 0.015 260);
+  --accent: oklch(0.3 0.06 255);
+  --accent-foreground: oklch(0.88 0.06 255);
+  --destructive: oklch(0.68 0.18 20);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.7 0.14 255);
+  --heat-pos: oklch(0.68 0.15 255);
+  --heat-neg: oklch(0.7 0.17 15);
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 30%), 0 8px 24px -12px oklch(0 0 0 / 50%);
+}
+
+@theme inline {
+  --color-heat-pos: var(--heat-pos);
+  --color-heat-neg: var(--heat-neg);
+  --color-clip: var(--clip);
+  --color-bit-sign: var(--bit-sign);
+  --color-bit-exp: var(--bit-exp);
+  --color-bit-man: var(--bit-man);
+  --shadow-card: var(--shadow-card);
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
 
 @layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  }
-
-  code, pre, .font-mono {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  }
-}
-
-@keyframes dashFlow {
-  to {
-    stroke-dashoffset: -24;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
   }
 }
 
-.animate-dash-flow {
-  stroke-dasharray: 6 6;
-  animation: dashFlow 0.9s linear infinite;
-}
+@keyframes stage-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@utility animate-stage-in { animation: stage-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes flow-dash { to { stroke-dashoffset: -20; } }
+@utility flow-dash { stroke-dasharray: 6 4; animation: flow-dash 0.8s linear infinite; }
 
-@keyframes softPulse {
-  0%, 100% {
-    opacity: 0.75;
-  }
-  50% {
-    opacity: 1;
-  }
+.math-theater { background: var(--theater); color: var(--theater-ink); }
+.stage-math-viewport { width: 100%; aspect-ratio: 960 / 400; }
+@media (max-width: 640px) {
+  .stage-math-viewport { aspect-ratio: 960 / 560; }
 }
-
-.animate-soft-pulse {
-  animation: softPulse 1.8s ease-in-out infinite;
+.math-theater button:hover { background: var(--theater-grid); color: var(--theater-ink); }
+.math-theater button[aria-label="Play animation"],
+.math-theater button[aria-label="Pause animation"] { background: var(--theater-gold); color: var(--theater); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }

@@ -1,465 +1,264 @@
-import {
-  CellResult,
-  GroupQuantParams,
-  PresetKey,
+import type {
+  FormatId,
+  FormatSpec,
+  Matrix,
+  PresetId,
   QuantConfig,
-  QuantizationResult,
-} from '../types/quantization';
+  QuantResult,
+} from "@/types/quantization";
 
-export interface PresetData {
-  key: PresetKey;
-  name: string;
-  description: string;
-  weights: number[][];
-  inputs: number[];
+export const FORMATS: FormatSpec[] = [
+  {
+    id: "BF16",
+    label: "BF16",
+    kind: "float",
+    bits: 16,
+    exponentBits: 8,
+    mantissaBits: 7,
+    maxValue: 3.39e38,
+  },
+  {
+    id: "FP16",
+    label: "FP16",
+    kind: "float",
+    bits: 16,
+    exponentBits: 5,
+    mantissaBits: 10,
+    maxValue: 65504,
+  },
+  {
+    id: "FP8",
+    label: "FP8 (E4M3)",
+    kind: "float",
+    bits: 8,
+    exponentBits: 4,
+    mantissaBits: 3,
+    maxValue: 448,
+  },
+  { id: "INT8", label: "INT8", kind: "int", bits: 8 },
+  { id: "INT4", label: "INT4", kind: "int", bits: 4 },
+  { id: "INT2", label: "INT2", kind: "int", bits: 2 },
+];
+export const getFormat = (id: FormatId) => FORMATS.find((f) => f.id === id)!;
+
+function seeded(seed: number) {
+  let s = seed >>> 0;
+  return () => (s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+}
+function gauss(rnd: () => number) {
+  const u = Math.max(rnd(), 1e-9),
+    v = rnd();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+const r3 = (x: number) => Math.round(x * 1000) / 1000;
+
+export function generatePreset(id: PresetId, seed = 7): Matrix {
+  const rnd = seeded(id === "random" ? Date.now() : seed);
+  const m: Matrix = Array.from({ length: 4 }, () => Array(4).fill(0));
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 4; c++) {
+      let v: number;
+      if (id === "normal") v = gauss(rnd) * 0.5;
+      else if (id === "outliers") v = gauss(rnd) * 0.3;
+      else if (id === "shifted") v = 0.8 + gauss(rnd) * 0.3;
+      else if (id === "uniform") v = rnd() * 2 - 1;
+      else v = (rnd() * 2 - 1) * (0.5 + rnd() * 1.5);
+      m[r]![c] = r3(v);
+    }
+  if (id === "outliers") {
+    m[1]![2] = 4.2;
+    m[3]![0] = -3.1;
+  }
+  return m;
 }
 
-export const PRESETS: Record<PresetKey, PresetData> = {
-  normal: {
-    key: 'normal',
-    name: 'Normal Weights',
-    description:
-      'Typical bell-curve trained weights centered near zero. Symmetric INT4/INT8 works cleanly with low error.',
-    weights: [
-      [0.42, -1.15, 0.88, -0.34],
-      [-0.76, 1.24, -0.19, 0.63],
-      [0.15, -0.58, 1.05, -0.92],
-      [0.95, 0.27, -1.31, 0.48],
-    ],
-    inputs: [1.2, -0.5, 0.8, 1.5],
-  },
-  outliers: {
-    key: 'outliers',
-    name: 'With Outliers',
-    description:
-      'Two large outlier weights (9.60, -8.40) stretch the per-tensor scale! Watch how clipping or Per-Channel/Per-Group rescues the small weights.',
-    weights: [
-      [0.35, -0.42, 9.6, 0.18],
-      [-0.51, 0.64, -0.22, 0.47],
-      [0.29, -8.4, 0.31, -0.15],
-      [0.44, -0.38, 0.52, -0.27],
-    ],
-    inputs: [1.0, 0.75, -0.6, 1.25],
-  },
-  biased: {
-    key: 'biased',
-    name: 'Shifted / Biased',
-    description:
-      'All weights are positive [1.10 .. 4.80]. Symmetric quantization wastes half its integer bins; Asymmetric (Affine) uses a Zero-Point Z to utilize all bins!',
-    weights: [
-      [1.2, 2.45, 3.1, 1.85],
-      [2.9, 4.8, 1.55, 3.4],
-      [1.1, 2.15, 3.95, 2.6],
-      [4.2, 1.75, 2.8, 3.65],
-    ],
-    inputs: [0.8, 1.1, -0.4, 0.9],
-  },
-  uniform: {
-    key: 'uniform',
-    name: 'Uniform Spread',
-    description:
-      'Evenly spaced weights from -1.50 to +1.50, ideal for observing uniform quantization step size Δ = S.',
-    weights: [
-      [-1.5, -1.3, -1.1, -0.9],
-      [-0.7, -0.5, -0.3, -0.1],
-      [0.1, 0.3, 0.5, 0.7],
-      [0.9, 1.1, 1.3, 1.5],
-    ],
-    inputs: [1.0, -1.0, 0.5, 0.5],
-  },
+export function intRange(bits: number, symmetric: boolean) {
+  return symmetric
+    ? { qmin: -(2 ** (bits - 1) - 1), qmax: 2 ** (bits - 1) - 1 }
+    : { qmin: 0, qmax: 2 ** bits - 1 };
+}
+
+export function blockIndexer(g: QuantConfig["granularity"], cols: number) {
+  if (g === "tensor") return () => 0;
+  if (g === "channel") return (r: number) => r;
+  return (r: number, c: number) => r * Math.ceil(cols / 2) + Math.floor(c / 2);
+}
+
+/** Round x to a float format with given mantissa bits (ignores subnormal detail, clamps to max). */
+export function roundToFloat(x: number, mantissaBits: number, maxValue: number) {
+  if (x === 0 || !isFinite(x)) return 0;
+  const e = Math.floor(Math.log2(Math.abs(x)));
+  const step = 2 ** (e - mantissaBits);
+  const v = Math.round(x / step) * step;
+  return Math.max(-maxValue, Math.min(maxValue, v));
+}
+
+export function quantize(W: Matrix, cfg: QuantConfig): QuantResult {
+  const f = getFormat(cfg.format);
+  const rows = W.length,
+    cols = W[0]!.length;
+  if (f.kind === "float") {
+    const q = W.map((row) => row.map((x) => roundToFloat(x, f.mantissaBits!, f.maxValue!)));
+    return { q, deq: q, params: null, blockOf: () => 0 };
+  }
+  const blockOf = blockIndexer(cfg.granularity, cols);
+  const nBlocks =
+    cfg.granularity === "tensor"
+      ? 1
+      : cfg.granularity === "channel"
+        ? rows
+        : rows * Math.ceil(cols / 2);
+  const mins = Array(nBlocks).fill(Infinity),
+    maxs = Array(nBlocks).fill(-Infinity);
+  W.forEach((row, r) =>
+    row.forEach((x, c) => {
+      const b = blockOf(r, c);
+      mins[b] = Math.min(mins[b], x);
+      maxs[b] = Math.max(maxs[b], x);
+    }),
+  );
+  const { qmin, qmax } = intRange(f.bits, cfg.symmetric);
+  const scales: number[] = [],
+    zeros: number[] = [];
+  for (let b = 0; b < nBlocks; b++) {
+    if (cfg.symmetric) {
+      const a = Math.max(Math.abs(mins[b]), Math.abs(maxs[b])) * cfg.alpha;
+      scales.push(a / qmax || 1e-8);
+      zeros.push(0);
+    } else {
+      const lo = Math.min(mins[b], 0) * cfg.alpha,
+        hi = Math.max(maxs[b], 0) * cfg.alpha;
+      const s = (hi - lo) / (qmax - qmin) || 1e-8;
+      scales.push(s);
+      zeros.push(Math.round(qmin - lo / s));
+    }
+  }
+  const q = W.map((row, r) =>
+    row.map((x, c) => {
+      const b = blockOf(r, c);
+      return Math.max(qmin, Math.min(qmax, Math.round(x / scales[b]!) + zeros[b]!));
+    }),
+  );
+  const deq = q.map((row, r) =>
+    row.map((v, c) => {
+      const b = blockOf(r, c);
+      return (v - zeros[b]!) * scales[b]!;
+    }),
+  );
+  return { q, deq, params: { scales, zeros, qmin, qmax }, blockOf };
+}
+
+export function matrixRange(W: Matrix) {
+  const flat = W.flat();
+  return { min: Math.min(...flat), max: Math.max(...flat) };
+}
+export const matVec = (W: Matrix, x: number[]) =>
+  W.map((row) => row.reduce((s, w, i) => s + w * x[i]!, 0));
+export const mse = (a: Matrix, b: Matrix) => {
+  const fa = a.flat(),
+    fb = b.flat();
+  return fa.reduce((s, v, i) => s + (v - fb[i]!) ** 2, 0) / fa.length;
 };
+export const bytesFor = (n: number, bits: number) => (n * bits) / 8;
 
-export function getFormatBits(config: QuantConfig): number {
-  if (config.format === 'bf16' || config.format === 'fp16') return 16;
-  if (config.format === 'fp8') return 8;
-  return config.bits;
-}
-
-export function isFloatFormat(format: QuantConfig['format']): boolean {
-  return format === 'bf16' || format === 'fp16' || format === 'fp8';
-}
-
-export function getFormatLabel(config: QuantConfig): string {
-  if (config.format === 'bf16') return 'BF16';
-  if (config.format === 'fp16') return 'FP16';
-  if (config.format === 'fp8') return 'FP8 (E4M3)';
-  return `INT${config.bits}`;
-}
-
-export function getQuantBounds(bits: number, scheme: 'symmetric' | 'asymmetric') {
-  const qMax = Math.pow(2, bits - 1) - 1;
-  const qMin = scheme === 'symmetric' ? -qMax : -Math.pow(2, bits - 1);
-  return { qMin, qMax };
-}
-
-function computeGroupParams(
-  values: number[],
-  id: string,
-  label: string,
-  config: QuantConfig
-): GroupQuantParams {
-  const { qMin, qMax } = getQuantBounds(config.bits, config.scheme);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
-
-  let clippedMin: number;
-  let clippedMax: number;
-  let scale: number;
-  let zeroPoint: number;
-
-  if (config.scheme === 'symmetric') {
-    const absMax = Math.max(Math.abs(minVal), Math.abs(maxVal), 1e-6) * config.clipRatio;
-    clippedMin = -absMax;
-    clippedMax = absMax;
-    scale = absMax / qMax;
-    zeroPoint = 0;
-  } else {
-    const center = (minVal + maxVal) / 2;
-    const halfSpan = Math.max((maxVal - minVal) / 2, 1e-6) * config.clipRatio;
-    clippedMin = center - halfSpan;
-    clippedMax = center + halfSpan;
-    scale = (clippedMax - clippedMin) / (qMax - qMin);
-    if (scale < 1e-8) scale = 1e-6;
-    const rawZ = Math.round(qMin - clippedMin / scale);
-    zeroPoint = Math.max(qMin, Math.min(qMax, rawZ));
-  }
-
-  if (config.manualOverride && config.granularity === 'per-tensor') {
-    scale = Math.max(config.manualScale, 1e-5);
-    zeroPoint =
-      config.scheme === 'symmetric'
-        ? 0
-        : Math.max(qMin, Math.min(qMax, Math.round(config.manualZeroPoint)));
-  }
-
-  return {
-    id,
-    label,
-    minVal,
-    maxVal,
-    clippedMin,
-    clippedMax,
-    scale,
-    zeroPoint,
-    qMin,
-    qMax,
-  };
-}
-
-export function quantizeLinearLayer(
-  weights: number[][],
-  inputs: number[],
-  config: QuantConfig
-): QuantizationResult {
-  const rows = weights.length;
-  const cols = weights[0]?.length ?? 0;
-  const effectiveBits = getFormatBits(config);
-  const floatMode = isFloatFormat(config.format);
-  const { qMin, qMax } = floatMode
-    ? { qMin: 0, qMax: 0 }
-    : getQuantBounds(effectiveBits, config.scheme);
-
-  const groups: GroupQuantParams[] = [];
-  const groupLookup = new Map<string, GroupQuantParams>();
-
-  if (config.granularity === 'per-tensor') {
-    const flat = weights.flat();
-    const g = computeGroupParams(flat, 'tensor', 'All Weights (Tensor)', config);
-    groups.push(g);
-    groupLookup.set('tensor', g);
-  } else if (config.granularity === 'per-channel') {
-    for (let r = 0; r < rows; r++) {
-      const id = `ch-${r}`;
-      const g = computeGroupParams(weights[r], id, `Row ${r} (Out Ch ${r})`, config);
-      groups.push(g);
-      groupLookup.set(id, g);
-    }
-  } else {
-    // per-group (group size = 2 along columns)
-    const groupSize = 2;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c += groupSize) {
-        const slice = weights[r].slice(c, c + groupSize);
-        const id = `g-${r}-${Math.floor(c / groupSize)}`;
-        const g = computeGroupParams(
-          slice,
-          id,
-          `R${r} C${c}..${Math.min(c + groupSize - 1, cols - 1)}`,
-          config
-        );
-        groups.push(g);
-        groupLookup.set(id, g);
+/** Encode a value as raw bits for a float format (sign | exponent | mantissa). Value is rounded first. */
+export function encodeFloat(x: number, expBits: number, manBits: number, maxValue: number) {
+  const bias = 2 ** (expBits - 1) - 1;
+  const v = roundToFloat(x, manBits, maxValue);
+  const sign = v < 0 || Object.is(v, -0) ? 1 : 0;
+  const a = Math.abs(v);
+  let exp = 0,
+    man = 0;
+  if (a > 0) {
+    let e = Math.floor(Math.log2(a));
+    if (e + bias <= 0) {
+      exp = 0;
+      man = Math.round(a / 2 ** (1 - bias - manBits));
+    } else {
+      exp = e + bias;
+      man = Math.round((a / 2 ** e - 1) * 2 ** manBits);
+      if (man === 2 ** manBits) {
+        man = 0;
+        exp++;
       }
     }
+    e = 0;
   }
-
-  const getGroupId = (r: number, c: number) => {
-    if (config.granularity === 'per-tensor') return 'tensor';
-    if (config.granularity === 'per-channel') return `ch-${r}`;
-    return `g-${r}-${Math.floor(c / 2)}`;
-  };
-
-  let sqErrSum = 0;
-  let absErrSum = 0;
-  let maxErr = 0;
-  let signalSqSum = 0;
-  const totalCells = rows * cols;
-
-  const cells: CellResult[][] = weights.map((rowArr, r) =>
-    rowArr.map((w, c) => {
-      const gid = getGroupId(r, c);
-      const gp = groupLookup.get(gid)!;
-
-      let wq = 0;
-      let rawRoundedQ = 0;
-      let isClipped = false;
-      let wDequant = w;
-      let storedDisplay = '';
-      let cellScale = gp.scale;
-      let cellZero = gp.zeroPoint;
-
-      if (config.format === 'bf16') {
-        wDequant = toBfloat16Approx(w);
-        cellScale = 1;
-        cellZero = 0;
-        storedDisplay = wDequant.toFixed(4);
-      } else if (config.format === 'fp16') {
-        wDequant = toFp16Approx(w);
-        cellScale = 1;
-        cellZero = 0;
-        storedDisplay = wDequant.toFixed(4);
-      } else if (config.format === 'fp8') {
-        const fp8 = toFp8E4M3(w);
-        wDequant = fp8.val;
-        wq = fp8.byte;
-        rawRoundedQ = fp8.byte;
-        isClipped = fp8.isClipped;
-        cellScale = 1;
-        cellZero = 0;
-        storedDisplay = fp8.hex;
-      } else {
-        rawRoundedQ = Math.round(w / gp.scale) + gp.zeroPoint;
-        wq = Math.max(gp.qMin, Math.min(gp.qMax, rawRoundedQ));
-        isClipped = rawRoundedQ < gp.qMin || rawRoundedQ > gp.qMax;
-        wDequant = gp.scale * (wq - gp.zeroPoint);
-        storedDisplay = String(wq);
-      }
-
-      const error = w - wDequant;
-      const absError = Math.abs(error);
-
-      sqErrSum += error * error;
-      absErrSum += absError;
-      if (absError > maxErr) maxErr = absError;
-      signalSqSum += w * w;
-
-      return {
-        row: r,
-        col: c,
-        wFp32: w,
-        wq,
-        storedDisplay,
-        rawRoundedQ,
-        wDequant,
-        error,
-        absError,
-        isClipped,
-        groupId: gid,
-        scale: cellScale,
-        zeroPoint: cellZero,
-        qMin: gp.qMin,
-        qMax: gp.qMax,
-      };
-    })
-  );
-
-  // Forward pass: y = W * x
-  const yTrue: number[] = [];
-  const yQuant: number[] = [];
-  const yError: number[] = [];
-
-  for (let r = 0; r < rows; r++) {
-    let sumTrue = 0;
-    let sumQuant = 0;
-    for (let c = 0; c < cols; c++) {
-      sumTrue += weights[r][c] * inputs[c];
-      sumQuant += cells[r][c].wDequant * inputs[c];
-    }
-    yTrue.push(sumTrue);
-    yQuant.push(sumQuant);
-    yError.push(sumTrue - sumQuant);
-  }
-
-  const weightMse = sqErrSum / totalCells;
-  const weightMae = absErrSum / totalCells;
-  const weightSqnrDb =
-    sqErrSum > 1e-12
-      ? 10 * Math.log10((signalSqSum + 1e-12) / sqErrSum)
-      : 99.9;
-
-  const outSqErr = yError.reduce((acc, e) => acc + e * e, 0);
-  const outAbsErr = yError.reduce((acc, e) => acc + Math.abs(e), 0);
-  const outputMse = outSqErr / rows;
-  const outputMae = outAbsErr / rows;
-
-  const dot = yTrue.reduce((acc, val, i) => acc + val * yQuant[i], 0);
-  const normTrue = Math.sqrt(yTrue.reduce((acc, val) => acc + val * val, 0));
-  const normQuant = Math.sqrt(yQuant.reduce((acc, val) => acc + val * val, 0));
-  const cosineSimilarity =
-    normTrue > 1e-9 && normQuant > 1e-9 ? dot / (normTrue * normQuant) : 1;
-
-  // Memory footprint comparison
-  const fp32Bits = totalCells * 32;
-  const quantizedWeightBits = totalCells * effectiveBits;
-  // Metadata: 0 bits for pure BF16/FP16/FP8 (unscaled), or 16-bit FP16 scale (+ 8-bit Z if asymmetric) per group
-  const bitsPerGroupMeta = floatMode
-    ? 0
-    : config.scheme === 'symmetric'
-    ? 16
-    : 24;
-  const metadataBits = groups.length * bitsPerGroupMeta;
-  const totalQuantizedBits = quantizedWeightBits + metadataBits;
-  const compressionRatio = fp32Bits / totalQuantizedBits;
-  const bandwidthSavedPct = ((fp32Bits - totalQuantizedBits) / fp32Bits) * 100;
-
+  const bits = (sign << (expBits + manBits)) | (exp << manBits) | man;
+  const total = 1 + expBits + manBits;
   return {
-    cells,
-    groups,
-    yTrue,
-    yQuant,
-    yError,
-    weightMse,
-    weightMae,
-    weightMaxErr: maxErr,
-    weightSqnrDb,
-    outputMse,
-    outputMae,
-    cosineSimilarity,
-    qMin,
-    qMax,
-    memory: {
-      fp32Bits,
-      quantizedWeightBits,
-      metadataBits,
-      totalQuantizedBits,
-      compressionRatio,
-      bandwidthSavedPct,
-    },
+    sign,
+    exp,
+    man,
+    bits,
+    total,
+    hex:
+      "0x" +
+      bits
+        .toString(16)
+        .toUpperCase()
+        .padStart(Math.ceil(total / 4), "0"),
+    binary: bits.toString(2).padStart(total, "0"),
   };
 }
 
-export function generateRandomWeights(): number[][] {
-  return Array.from({ length: 4 }, () =>
-    Array.from({ length: 4 }, () => Number(((Math.random() - 0.5) * 3.0).toFixed(2)))
-  );
+export function floatBitsFor(id: FormatId, x: number) {
+  const f = getFormat(id);
+  return encodeFloat(x, f.exponentBits!, f.mantissaBits!, f.maxValue!);
 }
 
-/**
- * Simulate IEEE-754 float16 (1 sign, 5 exp, 10 mantissa) precision loss.
- */
-export function toFp16Approx(val: number): number {
-  if (val === 0 || !Number.isFinite(val)) return val;
-  const f32 = new Float32Array(1);
-  const u32 = new Uint32Array(f32.buffer);
-  f32[0] = val;
-  const bits = u32[0];
-  const sign = (bits >>> 31) & 1;
-  const exp = ((bits >>> 23) & 0xff) - 127 + 15;
-  const mant = bits & 0x7fffff;
-
-  if (exp <= 0) return sign ? -0 : 0;
-  if (exp >= 31) return sign ? -65504 : 65504;
-
-  // Round 23-bit mantissa to 10-bit mantissa
-  const roundedMant = Math.round(mant / (1 << 13));
-  const finalExp = exp + (roundedMant >= 1024 ? 1 : 0);
-  const finalMant = roundedMant & 0x3ff;
-  const reconstructed =
-    (sign ? -1 : 1) * Math.pow(2, finalExp - 15) * (1 + finalMant / 1024);
-  return reconstructed;
-}
-
-/**
- * Simulate bfloat16 (1 sign, 8 exp, 7 mantissa) precision loss.
- */
-export function toBfloat16Approx(val: number): number {
-  if (val === 0 || !Number.isFinite(val)) return val;
-  const f32 = new Float32Array(1);
-  const u32 = new Uint32Array(f32.buffer);
-  f32[0] = val;
-  // Round-to-nearest-even on lower 16 bits of FP32
-  const roundingBias = 0x7fff + ((u32[0] >>> 16) & 1);
-  u32[0] = (u32[0] + roundingBias) & 0xffff0000;
-  return f32[0];
-}
-
-/**
- * Convert signed integer to two's-complement binary string of `bits` length.
- */
-export function toTwosComplementBits(val: number, bits: number): string {
-  const mask = (1 << bits) - 1;
-  const unsigned = val & mask;
-  return unsigned.toString(2).padStart(bits, '0');
-}
-
-/**
- * Pack two signed 4-bit integers into a single hex byte (high nibble = first).
- */
-export function packInt4PairToHex(hi: number, lo: number): string {
-  const byteVal = ((hi & 0xf) << 4) | (lo & 0xf);
-  return `0x${byteVal.toString(16).toUpperCase().padStart(2, '0')}`;
-}
-
-/**
- * Simulate FP8 E4M3 (1 sign, 4 exponent with bias=7, 3 mantissa).
- * Max finite representable magnitude is 448.
- */
-export function toFp8E4M3(val: number): {
-  val: number;
-  byte: number;
-  bits: string;
-  hex: string;
-  isClipped: boolean;
-} {
-  if (val === 0 || !Number.isFinite(val)) {
-    return { val: 0, byte: 0, bits: '00000000', hex: '0x00', isClipped: false };
+/** Symmetric integer quantization of a 1-D row, optionally group-wise. */
+export function quantRowSym(w: number[], bits: number, groupSize = w.length) {
+  const qmax = 2 ** (bits - 1) - 1;
+  const q: number[] = [],
+    deq: number[] = [],
+    scales: number[] = [];
+  for (let g = 0; g < w.length; g += groupSize) {
+    const chunk = w.slice(g, g + groupSize);
+    const s = Math.max(...chunk.map(Math.abs)) / qmax || 1e-8;
+    scales.push(s);
+    chunk.forEach((x) => {
+      const v = Math.max(-qmax, Math.min(qmax, Math.round(x / s)));
+      q.push(v);
+      deq.push(v * s);
+    });
   }
-  const sign = val < 0 ? 1 : 0;
-  let absVal = Math.abs(val);
-  let isClipped = false;
+  return { q, deq, scales };
+}
 
-  if (absVal > 448) {
-    absVal = 448;
-    isClipped = true;
+export const twosComplement = (v: number, bits: number) =>
+  ((v + 2 ** bits) % 2 ** bits).toString(2).padStart(bits, "0");
+
+/** Pack pairs of 4-bit two's-complement codes into bytes: first weight → high nibble. */
+export function packNibbles(q: number[]) {
+  const out: { hi: number; lo: number; byte: number; hex: string }[] = [];
+  for (let i = 0; i < q.length; i += 2) {
+    const hi = q[i]! & 0xf,
+      lo = (q[i + 1] ?? 0) & 0xf,
+      byte = (hi << 4) | lo;
+    out.push({ hi, lo, byte, hex: "0x" + byte.toString(16).toUpperCase().padStart(2, "0") });
   }
+  return out;
+}
 
-  let bestByte = 0;
-  let bestVal = 0;
-  let bestDiff = Infinity;
+export const mae = (a: number[], b: number[]) =>
+  a.reduce((s, v, i) => s + Math.abs(v - b[i]!), 0) / a.length;
 
-  // Search all finite E4M3 magnitudes (exp 0..15, mant 0..7; exp=15 & mant=7 is NaN)
-  for (let exp = 0; exp <= 15; exp++) {
-    const maxMant = exp === 15 ? 6 : 7;
-    for (let mant = 0; mant <= maxMant; mant++) {
-      const mag =
-        exp === 0
-          ? (mant / 8) * Math.pow(2, -6)
-          : (1 + mant / 8) * Math.pow(2, exp - 7);
-      const diff = Math.abs(absVal - mag);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        bestVal = mag;
-        bestByte = (sign << 7) | (exp << 3) | mant;
-      }
-    }
-  }
+/** GB to store `params` weights at `bits`, plus optional FP16 scale per `groupSize`. */
+export const storageGB = (params: number, bits: number, groupSize?: number) =>
+  (params * bits) / 8 / 1e9 + (groupSize ? ((params / groupSize) * 2) / 1e9 : 0);
 
-  const finalVal = sign ? -bestVal : bestVal;
-  return {
-    val: finalVal,
-    byte: bestByte,
-    bits: bestByte.toString(2).padStart(8, '0'),
-    hex: `0x${bestByte.toString(16).toUpperCase().padStart(2, '0')}`,
-    isClipped,
-  };
+/** Signal-to-quantization-noise ratio in dB: 10·log10(Σw² / Σ(w−ŵ)²). */
+export function sqnrDb(a: Matrix, b: Matrix) {
+  const fa = a.flat(),
+    fb = b.flat();
+  const sig = fa.reduce((s, v) => s + v * v, 0);
+  const noise = fa.reduce((s, v, i) => s + (v - fb[i]!) ** 2, 0);
+  return noise === 0 ? Infinity : 10 * Math.log10(sig / noise);
+}
+export function cosine(a: number[], b: number[]) {
+  const dot = a.reduce((s, v, i) => s + v * b[i]!, 0);
+  const na = Math.hypot(...a),
+    nb = Math.hypot(...b);
+  return na && nb ? dot / (na * nb) : 1;
 }
