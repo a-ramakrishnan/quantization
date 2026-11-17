@@ -69,6 +69,23 @@ export const PRESETS: Record<PresetKey, PresetData> = {
   },
 };
 
+export function getFormatBits(config: QuantConfig): number {
+  if (config.format === 'bf16' || config.format === 'fp16') return 16;
+  if (config.format === 'fp8') return 8;
+  return config.bits;
+}
+
+export function isFloatFormat(format: QuantConfig['format']): boolean {
+  return format === 'bf16' || format === 'fp16' || format === 'fp8';
+}
+
+export function getFormatLabel(config: QuantConfig): string {
+  if (config.format === 'bf16') return 'BF16';
+  if (config.format === 'fp16') return 'FP16';
+  if (config.format === 'fp8') return 'FP8 (E4M3)';
+  return `INT${config.bits}`;
+}
+
 export function getQuantBounds(bits: number, scheme: 'symmetric' | 'asymmetric') {
   const qMax = Math.pow(2, bits - 1) - 1;
   const qMin = scheme === 'symmetric' ? -qMax : -Math.pow(2, bits - 1);
@@ -136,7 +153,11 @@ export function quantizeLinearLayer(
 ): QuantizationResult {
   const rows = weights.length;
   const cols = weights[0]?.length ?? 0;
-  const { qMin, qMax } = getQuantBounds(config.bits, config.scheme);
+  const effectiveBits = getFormatBits(config);
+  const floatMode = isFloatFormat(config.format);
+  const { qMin, qMax } = floatMode
+    ? { qMin: 0, qMax: 0 }
+    : getQuantBounds(effectiveBits, config.scheme);
 
   const groups: GroupQuantParams[] = [];
   const groupLookup = new Map<string, GroupQuantParams>();
@@ -188,10 +209,42 @@ export function quantizeLinearLayer(
     rowArr.map((w, c) => {
       const gid = getGroupId(r, c);
       const gp = groupLookup.get(gid)!;
-      const rawRoundedQ = Math.round(w / gp.scale) + gp.zeroPoint;
-      const wq = Math.max(gp.qMin, Math.min(gp.qMax, rawRoundedQ));
-      const isClipped = rawRoundedQ < gp.qMin || rawRoundedQ > gp.qMax;
-      const wDequant = gp.scale * (wq - gp.zeroPoint);
+
+      let wq = 0;
+      let rawRoundedQ = 0;
+      let isClipped = false;
+      let wDequant = w;
+      let storedDisplay = '';
+      let cellScale = gp.scale;
+      let cellZero = gp.zeroPoint;
+
+      if (config.format === 'bf16') {
+        wDequant = toBfloat16Approx(w);
+        cellScale = 1;
+        cellZero = 0;
+        storedDisplay = wDequant.toFixed(4);
+      } else if (config.format === 'fp16') {
+        wDequant = toFp16Approx(w);
+        cellScale = 1;
+        cellZero = 0;
+        storedDisplay = wDequant.toFixed(4);
+      } else if (config.format === 'fp8') {
+        const fp8 = toFp8E4M3(w);
+        wDequant = fp8.val;
+        wq = fp8.byte;
+        rawRoundedQ = fp8.byte;
+        isClipped = fp8.isClipped;
+        cellScale = 1;
+        cellZero = 0;
+        storedDisplay = fp8.hex;
+      } else {
+        rawRoundedQ = Math.round(w / gp.scale) + gp.zeroPoint;
+        wq = Math.max(gp.qMin, Math.min(gp.qMax, rawRoundedQ));
+        isClipped = rawRoundedQ < gp.qMin || rawRoundedQ > gp.qMax;
+        wDequant = gp.scale * (wq - gp.zeroPoint);
+        storedDisplay = String(wq);
+      }
+
       const error = w - wDequant;
       const absError = Math.abs(error);
 
@@ -205,14 +258,15 @@ export function quantizeLinearLayer(
         col: c,
         wFp32: w,
         wq,
+        storedDisplay,
         rawRoundedQ,
         wDequant,
         error,
         absError,
         isClipped,
         groupId: gid,
-        scale: gp.scale,
-        zeroPoint: gp.zeroPoint,
+        scale: cellScale,
+        zeroPoint: cellZero,
         qMin: gp.qMin,
         qMax: gp.qMax,
       };
@@ -256,9 +310,13 @@ export function quantizeLinearLayer(
 
   // Memory footprint comparison
   const fp32Bits = totalCells * 32;
-  const quantizedWeightBits = totalCells * config.bits;
-  // Metadata: 16-bit FP16 scale (+ 8-bit zeroPoint if asymmetric) per group
-  const bitsPerGroupMeta = config.scheme === 'symmetric' ? 16 : 24;
+  const quantizedWeightBits = totalCells * effectiveBits;
+  // Metadata: 0 bits for pure BF16/FP16/FP8 (unscaled), or 16-bit FP16 scale (+ 8-bit Z if asymmetric) per group
+  const bitsPerGroupMeta = floatMode
+    ? 0
+    : config.scheme === 'symmetric'
+    ? 16
+    : 24;
   const metadataBits = groups.length * bitsPerGroupMeta;
   const totalQuantizedBits = quantizedWeightBits + metadataBits;
   const compressionRatio = fp32Bits / totalQuantizedBits;
@@ -350,4 +408,58 @@ export function toTwosComplementBits(val: number, bits: number): string {
 export function packInt4PairToHex(hi: number, lo: number): string {
   const byteVal = ((hi & 0xf) << 4) | (lo & 0xf);
   return `0x${byteVal.toString(16).toUpperCase().padStart(2, '0')}`;
+}
+
+/**
+ * Simulate FP8 E4M3 (1 sign, 4 exponent with bias=7, 3 mantissa).
+ * Max finite representable magnitude is 448.
+ */
+export function toFp8E4M3(val: number): {
+  val: number;
+  byte: number;
+  bits: string;
+  hex: string;
+  isClipped: boolean;
+} {
+  if (val === 0 || !Number.isFinite(val)) {
+    return { val: 0, byte: 0, bits: '00000000', hex: '0x00', isClipped: false };
+  }
+  const sign = val < 0 ? 1 : 0;
+  let absVal = Math.abs(val);
+  let isClipped = false;
+
+  if (absVal > 448) {
+    absVal = 448;
+    isClipped = true;
+  }
+
+  let bestByte = 0;
+  let bestVal = 0;
+  let bestDiff = Infinity;
+
+  // Search all finite E4M3 magnitudes (exp 0..15, mant 0..7; exp=15 & mant=7 is NaN)
+  for (let exp = 0; exp <= 15; exp++) {
+    const maxMant = exp === 15 ? 6 : 7;
+    for (let mant = 0; mant <= maxMant; mant++) {
+      const mag =
+        exp === 0
+          ? (mant / 8) * Math.pow(2, -6)
+          : (1 + mant / 8) * Math.pow(2, exp - 7);
+      const diff = Math.abs(absVal - mag);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestVal = mag;
+        bestByte = (sign << 7) | (exp << 3) | mant;
+      }
+    }
+  }
+
+  const finalVal = sign ? -bestVal : bestVal;
+  return {
+    val: finalVal,
+    byte: bestByte,
+    bits: bestByte.toString(2).padStart(8, '0'),
+    hex: `0x${bestByte.toString(16).toUpperCase().padStart(2, '0')}`,
+    isClipped,
+  };
 }

@@ -1,8 +1,10 @@
+export type TargetFormat = 'bf16' | 'fp16' | 'fp8' | 'int8' | 'int4' | 'int2';
 export type QuantScheme = 'symmetric' | 'asymmetric';
 export type Granularity = 'per-tensor' | 'per-channel' | 'per-group';
 export type PresetKey = 'normal' | 'outliers' | 'biased' | 'uniform';
 
 export interface QuantConfig {
+  format: TargetFormat;
   bits: number;
   scheme: QuantScheme;
   granularity: Granularity;
@@ -30,6 +32,7 @@ export interface CellResult {
   col: number;
   wFp32: number;
   wq: number;
+  storedDisplay: string;
   rawRoundedQ: number;
   wDequant: number;
   error: number; // wFp32 - wDequant

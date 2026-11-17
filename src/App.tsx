@@ -18,10 +18,14 @@ import {
   PresetKey,
   QuantConfig,
   QuantScheme,
+  TargetFormat,
 } from './types/quantization';
 import {
   PRESETS,
   generateRandomWeights,
+  getFormatBits,
+  getFormatLabel,
+  isFloatFormat,
   quantizeLinearLayer,
 } from './utils/quantization';
 import { PIPELINE_STEPS } from './data/pipelineSteps';
@@ -81,6 +85,7 @@ export function App() {
   ]);
 
   const [config, setConfig] = useState<QuantConfig>({
+    format: 'int4',
     bits: 4,
     scheme: 'symmetric',
     granularity: 'per-tensor',
@@ -89,6 +94,10 @@ export function App() {
     manualScale: 0.5,
     manualZeroPoint: 0,
   });
+
+  const formatLabel = getFormatLabel(config);
+  const floatMode = isFloatFormat(config.format);
+  const effectiveBits = getFormatBits(config);
 
   const [selectedPos, setSelectedPos] = useState<{ row: number; col: number }>({
     row: 0,
@@ -167,7 +176,7 @@ export function App() {
                 Linear Layer Quantization &amp; GPU Execution
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Guided Timeline: FP32 Weights → INT{config.bits} → GPU Dequantize → y = Wx
+                Guided Timeline: FP32 → {formatLabel} → GPU Dequantize → y = Wx
               </p>
             </div>
           </div>
@@ -345,96 +354,37 @@ export function App() {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
-                    {/* Bit-Width */}
+                  <div className="space-y-4 pt-2 border-t border-slate-200 dark:border-slate-800">
+                    {/* Target Format Progression: BF16 -> FP16 -> FP8 -> INT8 -> INT4 -> INT2 */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Bit-Width
+                          Target Format (FP32 → BF16 → FP16 → FP8 → INT8 → INT4 → INT2)
                         </label>
                         <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                          INT{config.bits} ({Math.pow(2, config.bits)} levels)
+                          {formatLabel} ({effectiveBits}-bit)
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {[2, 4, 8].map((b) => (
-                          <button
-                            key={b}
-                            type="button"
-                            onClick={() => setConfig((c) => ({ ...c, bits: b }))}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition ${
-                              config.bits === b
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                            }`}
-                          >
-                            INT{b}
-                          </button>
-                        ))}
-                        <input
-                          type="range"
-                          min={2}
-                          max={8}
-                          value={config.bits}
-                          onChange={(e) =>
-                            setConfig((c) => ({ ...c, bits: Number(e.target.value) }))
-                          }
-                          aria-label="Bit width slider"
-                          className="flex-1 accent-indigo-600"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Scheme */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Quantization Scheme
-                      </label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {(['symmetric', 'asymmetric'] as QuantScheme[]).map((scheme) => (
-                          <button
-                            key={scheme}
-                            type="button"
-                            onClick={() => setConfig((c) => ({ ...c, scheme }))}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
-                              config.scheme === scheme
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                            }`}
-                          >
-                            {scheme === 'symmetric' ? 'Symmetric (Z=0)' : 'Asymmetric'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Granularity */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Scale Granularity
-                      </label>
-                      <div className="grid grid-cols-3 gap-1">
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                         {(
                           [
-                            ['per-tensor', 'Tensor'],
-                            ['per-channel', 'Channel'],
-                            ['per-group', 'Group(2)'],
-                          ] as [Granularity, string][]
-                        ).map(([gran, label]) => (
+                            ['bf16', 'BF16', 16],
+                            ['fp16', 'FP16', 16],
+                            ['fp8', 'FP8', 8],
+                            ['int8', 'INT8', 8],
+                            ['int4', 'INT4', 4],
+                            ['int2', 'INT2', 2],
+                          ] as [TargetFormat, string, number][]
+                        ).map(([fmt, label, b]) => (
                           <button
-                            key={gran}
+                            key={fmt}
                             type="button"
                             onClick={() =>
-                              setConfig((c) => ({
-                                ...c,
-                                granularity: gran,
-                                manualOverride:
-                                  gran === 'per-tensor' ? c.manualOverride : false,
-                              }))
+                              setConfig((c) => ({ ...c, format: fmt, bits: b }))
                             }
-                            className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                              config.granularity === gran
-                                ? 'bg-indigo-600 text-white'
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition ${
+                              config.format === fmt
+                                ? 'bg-indigo-600 text-white shadow-xs'
                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                             }`}
                           >
@@ -444,46 +394,113 @@ export function App() {
                       </div>
                     </div>
 
-                    {/* Clipping */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Outlier Clipping (α)
-                        </label>
-                        <span className="text-xs font-mono font-semibold text-amber-600 dark:text-amber-400">
-                          {(config.clipRatio * 100).toFixed(0)}%
-                        </span>
+                    {!floatMode ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Scheme */}
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Quantization Scheme
+                          </label>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {(['symmetric', 'asymmetric'] as QuantScheme[]).map((scheme) => (
+                              <button
+                                key={scheme}
+                                type="button"
+                                onClick={() => setConfig((c) => ({ ...c, scheme }))}
+                                className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
+                                  config.scheme === scheme
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                {scheme === 'symmetric' ? 'Sym (Z=0)' : 'Asym'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Granularity */}
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Scale Granularity
+                          </label>
+                          <div className="grid grid-cols-3 gap-1">
+                            {(
+                              [
+                                ['per-tensor', 'Tensor'],
+                                ['per-channel', 'Channel'],
+                                ['per-group', 'Group(2)'],
+                              ] as [Granularity, string][]
+                            ).map(([gran, label]) => (
+                              <button
+                                key={gran}
+                                type="button"
+                                onClick={() =>
+                                  setConfig((c) => ({
+                                    ...c,
+                                    granularity: gran,
+                                    manualOverride:
+                                      gran === 'per-tensor' ? c.manualOverride : false,
+                                  }))
+                                }
+                                className={`px-1.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
+                                  config.granularity === gran
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Clipping */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                              Outlier Clipping (α)
+                            </label>
+                            <span className="text-xs font-mono font-semibold text-amber-600 dark:text-amber-400">
+                              {(config.clipRatio * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min={0.2}
+                              max={1.0}
+                              step={0.05}
+                              value={config.clipRatio}
+                              onChange={(e) =>
+                                setConfig((c) => ({
+                                  ...c,
+                                  clipRatio: Number(e.target.value),
+                                  manualOverride: false,
+                                }))
+                              }
+                              aria-label="Outlier clipping ratio"
+                              className="flex-1 accent-amber-500"
+                            />
+                            {config.clipRatio < 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setConfig((c) => ({ ...c, clipRatio: 1.0 }))
+                                }
+                                className="text-[11px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="range"
-                          min={0.2}
-                          max={1.0}
-                          step={0.05}
-                          value={config.clipRatio}
-                          onChange={(e) =>
-                            setConfig((c) => ({
-                              ...c,
-                              clipRatio: Number(e.target.value),
-                              manualOverride: false,
-                            }))
-                          }
-                          aria-label="Outlier clipping ratio"
-                          className="flex-1 accent-amber-500"
-                        />
-                        {config.clipRatio < 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setConfig((c) => ({ ...c, clipRatio: 1.0 }))
-                            }
-                            className="text-[11px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800"
-                          >
-                            Reset
-                          </button>
-                        )}
+                    ) : (
+                      <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                        <strong>{formatLabel}</strong> is a floating-point format (sign + exponent + mantissa bits). Unlike integer quantization, it represents values directly without a scale <span className="font-mono">S</span> or zero-point <span className="font-mono">Z</span>.
                       </div>
-                    </div>
+                    )}
                   </div>
                 </section>
 
@@ -585,7 +602,7 @@ export function App() {
                       onClick={() => goToStage(1)}
                       className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition"
                     >
-                      Quantize Weights (FP32 → INT{config.bits})
+                      Convert Weights (FP32 → {formatLabel})
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   )}

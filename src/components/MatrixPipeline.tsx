@@ -1,5 +1,6 @@
 import React from 'react';
 import { CellResult, Granularity, QuantConfig } from '../types/quantization';
+import { getFormatLabel, isFloatFormat } from '../utils/quantization';
 
 type MatrixColumn = 'fp32' | 'quantized' | 'dequantized' | 'error';
 
@@ -168,10 +169,12 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-              2. Quantized (W_q)
+              2. Stored ({getFormatLabel(config)})
             </span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-              INT{config.bits} [{result.qMin}..{result.qMax}]
+              {isFloatFormat(config.format)
+                ? getFormatLabel(config)
+                : `INT${config.bits} [${result.qMin}..${result.qMax}]`}
             </span>
           </div>
           <div className="grid grid-cols-4 gap-1.5">
@@ -182,17 +185,19 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
                   key={`wq-${r}-${c}`}
                   onClick={() => onSelectCell(r, c)}
                   style={{
-                    backgroundColor: valueBg(
-                      cell.wq - cell.zeroPoint,
-                      Math.max(Math.abs(result.qMax), Math.abs(result.qMin))
-                    ),
+                    backgroundColor: isFloatFormat(config.format)
+                      ? valueBg(cell.wDequant, maxAbsW)
+                      : valueBg(
+                          cell.wq - cell.zeroPoint,
+                          Math.max(Math.abs(result.qMax), Math.abs(result.qMin))
+                        ),
                   }}
                   className={`relative rounded-lg border border-slate-200 dark:border-slate-700/80 py-1.5 px-1 text-center font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 transition ${cellRing(
                     r,
                     c
                   )}`}
                 >
-                  {cell.wq}
+                  {cell.storedDisplay}
                   {cell.isClipped && (
                     <span
                       title="Clipped to range!"
