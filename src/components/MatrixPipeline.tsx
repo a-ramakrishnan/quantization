@@ -1,6 +1,8 @@
 import React from 'react';
 import { CellResult, Granularity, QuantConfig } from '../types/quantization';
 
+type MatrixColumn = 'fp32' | 'quantized' | 'dequantized' | 'error';
+
 interface MatrixPipelineProps {
   weights: number[][];
   result: QuantizationResultCompat;
@@ -9,6 +11,9 @@ interface MatrixPipelineProps {
   onSelectCell: (row: number, col: number) => void;
   onUpdateWeight: (row: number, col: number, value: number) => void;
   activeStep: number;
+  visibleColumns?: MatrixColumn[];
+  title?: string;
+  subtitle?: string;
 }
 
 // Local structural type to avoid circular/unused issues
@@ -37,7 +42,19 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
   onSelectCell,
   onUpdateWeight,
   activeStep,
+  visibleColumns = ['fp32', 'quantized', 'dequantized', 'error'],
+  title = 'Weight Transformation Pipeline (4×4 Linear Layer)',
+  subtitle = 'Edit any FP32 weight in W or click any cell to inspect its exact math & values.',
 }) => {
+  const show = (col: MatrixColumn) => visibleColumns.includes(col);
+  const gridColsClass =
+    visibleColumns.length === 1
+      ? 'grid-cols-1 max-w-sm'
+      : visibleColumns.length === 2
+      ? 'grid-cols-1 md:grid-cols-2'
+      : visibleColumns.length === 3
+      ? 'grid-cols-1 md:grid-cols-3'
+      : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4';
   const flatWeights = weights.flat();
   const maxAbsW = Math.max(...flatWeights.map((v) => Math.abs(v)), 0.01);
   const maxAbsErr = Math.max(
@@ -75,10 +92,10 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Side-by-Side Weight Transformation Pipeline (4×4 Linear Layer)
+            {title}
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Edit any FP32 weight in <strong className="text-slate-700 dark:text-slate-200">W</strong> or click any cell to inspect its exact math &amp; GPU register values.
+            {subtitle}
           </p>
         </div>
         <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
@@ -86,8 +103,9 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className={`grid ${gridColsClass} gap-4`}>
         {/* 1. FP32 Weights W */}
+        {show('fp32') && (
         <div
           className={`rounded-xl border p-3 transition ${
             activeStep === 0
@@ -137,8 +155,10 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
             Original 32-bit floats. Positive values shown in blue, negative in rose.
           </p>
         </div>
+        )}
 
         {/* 2. Quantized Integers W_q */}
+        {show('quantized') && (
         <div
           className={`rounded-xl border p-3 transition ${
             activeStep === 1 || activeStep === 2 || activeStep === 3
@@ -187,8 +207,10 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
             Stored in GPU HBM. Amber dot indicates the weight was clipped to [{result.qMin}, {result.qMax}].
           </p>
         </div>
+        )}
 
         {/* 3. Dequantized Weights W_hat */}
+        {show('dequantized') && (
         <div
           className={`rounded-xl border p-3 transition ${
             activeStep === 4
@@ -226,8 +248,10 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
             Reconstructed via Ŵ = S·(W_q − Z) in SM registers just before Tensor Core matmul.
           </p>
         </div>
+        )}
 
         {/* 4. Quantization Error W - W_hat */}
+        {show('error') && (
         <div
           className={`rounded-xl border p-3 transition ${
             activeStep === 5
@@ -266,6 +290,7 @@ export const MatrixPipeline: React.FC<MatrixPipelineProps> = ({
             Difference between true W and dequantized Ŵ. Brighter amber = larger error.
           </p>
         </div>
+        )}
       </div>
     </section>
   );
