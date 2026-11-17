@@ -7,6 +7,7 @@ import {
   QuantizationResult,
 } from '../types/quantization';
 import { GPU_COMPONENT_DETAILS, PIPELINE_STEPS } from '../data/pipelineSteps';
+import { getFormatLabel } from '../utils/quantization';
 
 interface GpuArchitectureProps {
   activeStep: number;
@@ -68,7 +69,7 @@ export const GpuArchitecture: React.FC<GpuArchitectureProps> = ({
             {result.memory.compressionRatio.toFixed(2)}× HBM Compression
           </span>
           <span className="px-2.5 py-1 rounded-full font-mono font-medium bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
-            INT{config.bits} Weights → FP32 Compute
+            {getFormatLabel(config)} Weights → FP32 Compute
           </span>
         </div>
       </div>
@@ -280,7 +281,7 @@ export const GpuArchitecture: React.FC<GpuArchitectureProps> = ({
                 strokeWidth="1"
               />
               <text x="285" y="124" className="fill-emerald-700 dark:fill-emerald-300 text-[10px] font-semibold">
-                Packed W_q (INT{config.bits})
+                Packed W_q ({getFormatLabel(config)})
               </text>
               <text x="285" y="141" className="fill-slate-700 dark:fill-slate-200 text-[9.5px] font-mono">
                 {result.memory.quantizedWeightBits} bits ({result.memory.bandwidthSavedPct.toFixed(0)}% saved)

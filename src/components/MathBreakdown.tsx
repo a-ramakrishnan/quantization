@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calculator } from 'lucide-react';
 import { CellResult, GroupQuantParams, QuantConfig } from '../types/quantization';
+import { getFormatLabel, isFloatFormat, toFp8E4M3 } from '../utils/quantization';
 
 interface MathBreakdownProps {
   selectedCell: CellResult;
@@ -16,6 +17,8 @@ export const MathBreakdown: React.FC<MathBreakdownProps> = ({
   const { scale, zeroPoint, qMin, qMax, clippedMin, clippedMax } = groupParams;
   const divided = selectedCell.wFp32 / scale;
   const rounded = Math.round(divided);
+  const floatMode = isFloatFormat(config.format);
+  const fp8Info = config.format === 'fp8' ? toFp8E4M3(selectedCell.wFp32) : null;
 
   return (
     <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 shadow-sm p-4 lg:p-5 space-y-3.5">
@@ -29,14 +32,67 @@ export const MathBreakdown: React.FC<MathBreakdownProps> = ({
               Live Step-by-Step Math for Cell [{selectedCell.row}, {selectedCell.col}]
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Group: <span className="font-medium">{groupParams.label}</span> ·{' '}
-              {config.scheme === 'symmetric' ? 'Symmetric' : 'Asymmetric (Affine)'} · INT
-              {config.bits}
+              {floatMode ? (
+                <>Format: <span className="font-medium">{getFormatLabel(config)}</span> (Floating-Point Precision)</>
+              ) : (
+                <>
+                  Group: <span className="font-medium">{groupParams.label}</span> ·{' '}
+                  {config.scheme === 'symmetric' ? 'Symmetric' : 'Asymmetric (Affine)'} · INT
+                  {config.bits}
+                </>
+              )}
             </p>
           </div>
         </div>
       </div>
 
+      {floatMode ? (
+        <div className="space-y-2.5 text-xs">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3 space-y-1">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+              1. Bit-Field Layout ({getFormatLabel(config)})
+            </span>
+            <div className="font-mono text-[11.5px] text-indigo-600 dark:text-indigo-400">
+              {config.format === 'bf16' && '1 Sign + 8 Exponent + 7 Mantissa (16 bits / 2 bytes)'}
+              {config.format === 'fp16' && '1 Sign + 5 Exponent + 10 Mantissa (16 bits / 2 bytes)'}
+              {config.format === 'fp8' && '1 Sign + 4 Exponent (bias 7) + 3 Mantissa (8 bits / 1 byte)'}
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              No integer Scale (S) or Zero-Point (Z) is needed—values round directly to the nearest representable float.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3 space-y-1">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+              2. Nearest Representable Value
+            </span>
+            <div className="font-mono text-[11.5px] text-slate-700 dark:text-slate-300">
+              FP32: <strong>{selectedCell.wFp32.toFixed(6)}</strong> → {getFormatLabel(config)}:{' '}
+              <strong className="text-amber-600 dark:text-amber-400">
+                {selectedCell.wDequant.toFixed(6)}
+              </strong>
+              {fp8Info && (
+                <div className="mt-1 text-emerald-600 dark:text-emerald-400">
+                  Encoded Byte: {fp8Info.hex} ({fp8Info.bits.slice(0, 1)} {fp8Info.bits.slice(1, 5)} {fp8Info.bits.slice(5)})
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3 space-y-1">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+              3. Representation Error
+            </span>
+            <div className="font-mono text-[11.5px] text-slate-700 dark:text-slate-300">
+              e = W − Ŵ ={' '}
+              <strong className="text-rose-600 dark:text-rose-400">
+                {selectedCell.error >= 0 ? '+' : ''}
+                {selectedCell.error.toFixed(6)}
+              </strong>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="space-y-2.5 text-xs">
         {/* 1. Scale & Zero-Point */}
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3 space-y-1">
@@ -127,6 +183,7 @@ export const MathBreakdown: React.FC<MathBreakdownProps> = ({
           </div>
         </div>
       </div>
+      )}
     </section>
   );
 };
