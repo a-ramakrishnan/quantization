@@ -1,92 +1,36 @@
-export type TargetFormat = 'bf16' | 'fp16' | 'fp8' | 'int8' | 'int4' | 'int2';
-export type QuantScheme = 'symmetric' | 'asymmetric';
-export type Granularity = 'per-tensor' | 'per-channel' | 'per-group';
-export type PresetKey = 'normal' | 'outliers' | 'biased' | 'uniform';
+export type Matrix = number[][];
+export type FormatId = "BF16" | "FP16" | "FP8" | "INT8" | "INT4" | "INT2";
+export type Granularity = "tensor" | "channel" | "group";
+export type PresetId = "normal" | "outliers" | "shifted" | "uniform" | "random";
+
+export interface FormatSpec {
+  id: FormatId;
+  label: string;
+  kind: "float" | "int";
+  bits: number;
+  exponentBits?: number;
+  mantissaBits?: number;
+  maxValue?: number;
+}
 
 export interface QuantConfig {
-  format: TargetFormat;
-  bits: number;
-  scheme: QuantScheme;
+  format: FormatId;
+  symmetric: boolean;
   granularity: Granularity;
-  clipRatio: number; // 0.5 to 1.0
-  manualOverride: boolean;
-  manualScale: number;
-  manualZeroPoint: number;
+  alpha: number; // clipping ratio 0.5..1
 }
 
-export interface GroupQuantParams {
-  id: string;
-  label: string;
-  minVal: number;
-  maxVal: number;
-  clippedMin: number;
-  clippedMax: number;
-  scale: number;
-  zeroPoint: number;
-  qMin: number;
-  qMax: number;
+export interface QuantParams {
+  /** one entry per block (tensor = 1, channel = rows, group = rows*cols/2) */
+  scales: number[];
+  zeros: number[];
+  qmin: number;
+  qmax: number;
 }
 
-export interface CellResult {
-  row: number;
-  col: number;
-  wFp32: number;
-  wq: number;
-  storedDisplay: string;
-  rawRoundedQ: number;
-  wDequant: number;
-  error: number; // wFp32 - wDequant
-  absError: number;
-  isClipped: boolean;
-  groupId: string;
-  scale: number;
-  zeroPoint: number;
-  qMin: number;
-  qMax: number;
-}
-
-export interface MemoryStats {
-  fp32Bits: number;
-  quantizedWeightBits: number;
-  metadataBits: number;
-  totalQuantizedBits: number;
-  compressionRatio: number;
-  bandwidthSavedPct: number;
-}
-
-export interface QuantizationResult {
-  cells: CellResult[][];
-  groups: GroupQuantParams[];
-  yTrue: number[];
-  yQuant: number[];
-  yError: number[];
-  weightMse: number;
-  weightMae: number;
-  weightMaxErr: number;
-  weightSqnrDb: number;
-  outputMse: number;
-  outputMae: number;
-  cosineSimilarity: number;
-  qMin: number;
-  qMax: number;
-  memory: MemoryStats;
-}
-
-export type GpuComponentId =
-  | 'host'
-  | 'hbm'
-  | 'l2'
-  | 'sram'
-  | 'registers'
-  | 'tensor_cores';
-
-export interface PipelineStepInfo {
-  id: number;
-  shortTitle: string;
-  title: string;
-  gpuTarget: GpuComponentId;
-  gpuLabel: string;
-  formula: string;
-  explanation: string;
-  whyItMatters: string;
+export interface QuantResult {
+  q: Matrix; // integer codes (int) or rounded values (float)
+  deq: Matrix;
+  params: QuantParams | null;
+  blockOf: (r: number, c: number) => number;
 }
