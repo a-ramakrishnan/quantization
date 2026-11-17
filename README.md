@@ -1,44 +1,62 @@
 # Linear Layer Quantization & GPU Execution Visualizer
 
-An interactive React + TypeScript + Tailwind CSS visualization that demonstrates how neural network weights are **calibrated, quantized, stored in GPU HBM, streamed to SM Shared Memory, dequantized on-the-fly in registers, and multiplied in Tensor Cores** for a linear layer ($y = Wx$).
+An interactive **React + TypeScript + Tailwind CSS** visualizer that walks step-by-step through how neural network weights in a linear layer ($y = Wx$) are **calibrated, compressed across BF16 / FP16 / FP8 / INT8 / INT4 / INT2, bit-packed in GPU HBM, streamed to SM Shared Memory, dequantized on-the-fly in registers, and multiplied in Tensor Cores**.
 
 > Repository: [github.com/a-ramakrishnan/quantization](https://github.com/a-ramakrishnan/quantization)
 
-## Features
+---
 
-- **Interactive GPU Architecture Diagram**
-  - Visualizes the full hardware dataflow: **Host CPU / Calibrator → PCIe → GPU HBM (VRAM) → L2 Cache → Streaming Multiprocessor (SM) Shared Memory (SRAM) → Register File (Dequantizer) → Tensor Cores (FP32 Accumulators)**.
-  - Live-synchronized with the 6-step playback and displays real numbers from your active weight matrix, plus HBM memory compression stats.
-  - Click any hardware block to inspect its role and why quantization accelerates it.
-- **Side-by-Side Matrix Pipeline (4×4 Linear Layer)**
-  - **FP32 Weights ($W$)**: Directly editable cells with color-coded heatmap.
-  - **Quantized Integers ($W_q$)**: Shows exact `INT2`–`INT8` integers and highlights clipped values.
-  - **Dequantized Weights ($\hat{W}$)**: Reconstructed float values computed in SM registers.
-  - **Quantization Error ($W - \hat{W}$)**: Diverging error heatmap.
-- **Number-Line Bin Mapping**
-  - Shows continuous FP32 weights snapping to discrete integer quantization levels separated by step size $\Delta = S$, with clipping bounds $[\alpha_{\min}, \alpha_{\max}]$ and Zero-Point $Z$.
-- **Live Step-by-Step Math Breakdown**
-  - Plugs the selected cell's exact numbers into every formula: Scale $S$, Zero-Point $Z$, Quantization $W_q$, Dequantization $\hat{W}$, and Error $e$.
-- **Linear Layer Forward Pass ($y = Wx$ vs. $\hat{y} = \hat{W}x$)**
-  - Editable input activation vector $x$ with bar chart comparison and summary metrics: **Weight MSE**, **Weight SQNR (dB)**, **Output MSE**, **Cosine Similarity**, and **HBM Memory Savings**.
-- **Rich Controls & Light/Dark Mode**
-  - Presets: *Normal Weights*, *With Outliers*, *Shifted / Biased*, *Uniform Spread*, plus *Randomize*.
-  - Bit-widths: `INT2`, `INT4`, `INT8`, or any custom bit-width from 2 to 8.
-  - Schemes: **Symmetric** ($Z = 0$) vs. **Asymmetric / Affine**.
-  - Granularities: **Per-Tensor**, **Per-Channel**, and **Per-Group ($g=2$)**.
-  - **Outlier Clipping ($\alpha$)** slider & optional manual Scale / Zero-Point override.
+## Guided 4-Stage Interactive Timeline
 
-## Quantization Math
+Instead of overwhelming you with every chart at once, the app unfolds as a progressive timeline (with a **Show All / Timeline View** toggle in the header):
 
-### 1. Symmetric Quantization ($Z = 0$)
-$$q_{\max} = 2^{b-1} - 1, \quad q_{\min} = -q_{\max}$$
-$$S = \frac{\max(|W_{\min}|, |W_{\max}|) \cdot \alpha}{q_{\max}}, \quad W_q = \text{clamp}\left(\text{round}\left(\frac{W}{S}\right), q_{\min}, q_{\max}\right)$$
-$$\hat{W} = S \cdot W_q$$
+1. **Stage 1 — Weights & Calibrate**
+   - Pick a weight preset (*Normal*, *With Outliers*, *Shifted / Biased*, *Uniform*, *Random*) or edit any cell in the 4×4 FP32 weight matrix $W$.
+   - Choose a target format along the precision ladder: **`BF16` → `FP16` → `FP8 (E4M3)` → `INT8` → `INT4` → `INT2`**.
+   - For integer formats, configure **Symmetric vs. Asymmetric (Affine)**, **Per-Tensor / Per-Channel / Per-Group ($g=2$)** granularity, and **Outlier Clipping ($\alpha$)**.
+   - Immediately see the **First-Level Output**: observed range, target integer bounds, **Scale ($S$)**, and **Zero-Point ($Z$)**.
 
-### 2. Asymmetric (Affine) Quantization
-$$q_{\max} = 2^{b-1} - 1, \quad q_{\min} = -2^{b-1}$$
-$$S = \frac{\alpha_{\max} - \alpha_{\min}}{q_{\max} - q_{\min}}, \quad Z = \text{clamp}\left(\text{round}\left(q_{\min} - \frac{\alpha_{\min}}{S}\right), q_{\min}, q_{\max}\right)$$
-$$W_q = \text{clamp}\left(\text{round}\left(\frac{W}{S}\right) + Z, q_{\min}, q_{\max}\right), \quad \hat{W} = S \cdot (W_q - Z)$$
+2. **Stage 2 — Quantize & Format Journey (`FP32 → Target Format`)**
+   - Side-by-side **FP32 ($W$) → Stored ($W_q$ / FP8 Hex / BF16 / FP16)** matrices with clipping indicators.
+   - **Number-Line Bin Mapping**: Watch continuous FP32 weights snap to discrete integer buckets separated by $\Delta = S$.
+   - **Live Step-by-Step Math Breakdown**: Exact numbers plugged into every formula for the selected cell (or sign/exponent/mantissa bit-field layout for BF16/FP16/FP8).
+   - **Progressive Format Journey & INT4 Bit-Packing**:
+     - Track an 8-weight Transformer row (or outlier row) across `FP32 → FP16 → BF16 → INT8 → Packed INT4`.
+     - Inspect physical **INT4 nibble bit-packing** (two 4-bit two's-complement weights packed per byte, e.g. `-7, -6` → `1001 1010` → `0x9A`) and **9B-parameter LLM memory footprints** (`36 GB` FP32 → `18 GB` FP16/BF16 → `9 GB` INT8 → `~4.64 GB` INT4 Group-128).
+
+3. **Stage 3 — GPU Memory Hierarchy & On-the-Fly Dequantization**
+   - **Break Down Boxes Independently**: Step through each hardware unit one by one (**Host CPU/Calibrator**, **GPU HBM/VRAM**, **L2 → SM SRAM**, **SM Register File Dequantizer**, **Tensor Core Accumulator**) to see how your weight row transforms inside each box.
+   - **Reconstruct Together**: View the full unified **GPU Architecture & Dataflow** SVG diagram with animated data movement and clickable hardware inspector cards.
+
+```mermaid
+flowchart LR
+  Host["Host CPU / Calibrator\nQuantize W -> W_q, (S, Z)"] -->|PCIe| HBM["GPU HBM / VRAM\nStore Packed W_q + (S, Z) + X"]
+  HBM --> L2["L2 Cache\nTile Reuse"]
+  L2 --> SRAM["SM Shared Memory (SRAM)\nStage W_q, (S, Z), X Tiles"]
+  SRAM --> Reg["Register File\nDequantize W_hat = S*(W_q - Z)"]
+  Reg --> TC["Tensor Cores\nFP32 Accumulate y_hat = W_hat * X"]
+  TC -->|Write y_hat| HBM
+```
+
+4. **Stage 4 — Linear Layer Forward Pass ($y = Wx$ vs. $\hat{y} = \hat{W}x$)**
+   - Edit the FP32 input activation vector $x$ and compare true $y = Wx$ against quantized $\hat{y} = \hat{W}x$.
+   - Inspect **Weight MSE**, **Weight SQNR (dB)**, **Output MSE**, **Cosine Similarity**, and **HBM Memory Savings**.
+
+---
+
+## Supported Formats at a Glance
+
+| Format | Bits / Weight | Layout / Mapping | Scale Metadata | HBM Savings vs FP32 |
+| :--- | :---: | :--- | :---: | :---: |
+| **FP32** | 32 | `1S + 8E + 23M` | None | `1.0×` (baseline) |
+| **BF16** | 16 | `1S + 8E + 7M` (wide range) | None | `2.0×` |
+| **FP16** | 16 | `1S + 5E + 10M` (higher precision) | None | `2.0×` |
+| **FP8 (E4M3)** | 8 | `1S + 4E + 3M` (max `±448`) | Optional | `4.0×` |
+| **INT8** | 8 | `[-127, 127]` Sym / `[-128, 127]` Asym | $S$ (and $Z$) | `~4.0×` |
+| **INT4** | 4 | `[-7, 7]` Sym / `[-8, 7]` Asym (2 per byte) | $S$ (and $Z$) | `~6.4× – 8.0×` |
+| **INT2** | 2 | `[-1, 1]` Sym / `[-2, 1]` Asym | $S$ (and $Z$) | `~10.7× – 16.0×` |
+
+---
 
 ## Getting Started
 
