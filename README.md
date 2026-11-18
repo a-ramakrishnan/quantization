@@ -2,7 +2,7 @@
 
 An interactive guide to what happens when a model weight is stored with fewer bits. Follow one weight from calibration through GPU memory and into a dot product, then see how the same choices affect model storage and the KV cache.
 
-[**Open the interactive studio**](https://a-ramakrishnan.github.io/quantization/) · [Compare configurations](https://a-ramakrishnan.github.io/quantization/?view=compare) · [Qwen3.5-9B memory calculator](https://a-ramakrishnan.github.io/quantization/?view=kv-cache)
+[**Open the interactive studio**](https://a-ramakrishnan.github.io/quantization/) · [Compare configurations](https://a-ramakrishnan.github.io/quantization/?view=compare) · [KV-cache memory calculator](https://a-ramakrishnan.github.io/quantization/?view=kv-cache)
 
 ## What you can explore
 
@@ -15,7 +15,7 @@ The home page links directly to every walkthrough, lab, experiment, and calculat
 | **Basic lab** | Edit small query, key, and value projection matrices. Inspect the stored bits, decoded weights, and how each change affects the output. |
 | **Advanced lab** | Calibrate a 4×4 matrix, choose symmetric or affine quantization, and test per-tensor, per-row, or per-group scales and clipping. Select **Trace one weight** to step through each operation. |
 | **Compression experiment** | Compare dense BF16, dense INT4, and sparse INT4. The byte count includes packed codes, the shared scale, and the sparsity mask. |
-| **KV-cache calculator** | Estimate Qwen3.5-9B memory on an NVIDIA L4 or A100. Change weight and cache precision independently, then vary context length and concurrency. |
+| **KV-cache calculator** | Compare Qwen3.5, Qwen2.5, Qwen3, and Llama 3.1 memory across NVIDIA data-center and GeForce GPUs. Change weight and cache precision independently, then vary context length and concurrency. |
 
 ## A weight’s journey
 

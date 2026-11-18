@@ -137,7 +137,7 @@ export function QuantizationLesson() {
     { href: "#rounding-boundary", title: "Rounding boundary", description: "Drag a weight across a fixed INT4 threshold.", icon: SlidersHorizontal, color: "blue" },
     { href: "#compression", title: "Compression experiment", description: "Prune weights and count packed codes, mask, and scale.", icon: Layers, color: "green" },
     { href: "#model-storage", title: "Model weight storage", description: "Compare weight footprints and look up the symbols.", icon: HardDrive, color: "green" },
-    { href: "?view=kv-cache", title: "KV cache & GPU memory", description: "Estimate Qwen3.5-9B memory on an A100 or L4.", icon: Calculator, color: "green" },
+    { href: "?view=kv-cache", title: "KV cache & GPU memory", description: "Compare model layouts and GPU memory budgets.", icon: Calculator, color: "green" },
   ];
 
   return (
