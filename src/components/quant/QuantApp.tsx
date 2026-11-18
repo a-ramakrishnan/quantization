@@ -27,8 +27,8 @@ const STAGES = [
   "Input x & Forward Pass (y = Wx vs ŷ = Ŵx)",
 ];
 
-export function QuantApp({ onOpenLesson }: { onOpenLesson: () => void }) {
-  const [mode, setMode] = useState<"basic" | "advanced">("basic");
+export function QuantApp({ initialMode }: { initialMode: "basic" | "advanced" }) {
+  const [mode, setMode] = useState(initialMode);
   const [dark, setDark] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const [unlocked, setUnlocked] = useState(1);
@@ -50,6 +50,10 @@ export function QuantApp({ onOpenLesson }: { onOpenLesson: () => void }) {
   }, [dark]);
 
   const visible = showAll ? 4 : unlocked;
+  const changeMode = (value: typeof mode) => {
+    setMode(value);
+    window.history.replaceState(window.history.state, "", `?view=${value}`);
+  };
   const go = (s: number) => {
     setUnlocked((u) => Math.max(u, s));
     setTimeout(
@@ -66,10 +70,10 @@ export function QuantApp({ onOpenLesson }: { onOpenLesson: () => void }) {
             Linear Layer Quantization &amp; GPU Execution
           </h1>
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={onOpenLesson}>Lesson</Button>
+            <Button size="sm" variant="outline" asChild><a href="./">Home</a></Button>
             <div role="group" aria-label="Experience mode" className="flex rounded-lg border p-0.5">
               {(["basic", "advanced"] as const).map(value => (
-                <Button key={value} size="sm" variant={mode === value ? "secondary" : "ghost"} aria-pressed={mode === value} onClick={() => setMode(value)}>
+                <Button key={value} size="sm" variant={mode === value ? "secondary" : "ghost"} aria-pressed={mode === value} onClick={() => changeMode(value)}>
                   {value === "basic" ? "Basic" : "Advanced"}
                 </Button>
               ))}

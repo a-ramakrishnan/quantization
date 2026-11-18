@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { ArrowRight, AudioLines, ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from "lucide-react";
+import {
+  ArrowDown, ArrowRight, AudioLines, Calculator, ChevronLeft, ChevronRight, GitCompareArrows,
+  Grid2X2, HardDrive, Layers, Pause, Play, RotateCcw, SlidersHorizontal, Workflow,
+} from "lucide-react";
 import { floatBitsFor, floatStep, getFormat, packNibbles, twosComplement } from "@/utils/quantization";
 import { useLessonPlayback } from "./useLessonPlayback";
 import { ModelStorage, SymbolLegend } from "./LessonReference";
@@ -22,7 +25,7 @@ function reveal(progress: number, index: number) {
   };
 }
 
-export function QuantizationLesson({ onOpenStudio }: { onOpenStudio: () => void }) {
+export function QuantizationLesson() {
   const [mode, setMode] = useState<LessonMode>("INT4");
   const activationBits = mode === "W8A8" ? 8 : mode === "W8A16" ? 16 : undefined;
   const format = mode === "W8A16" || mode === "W8A8" ? "INT8" : mode;
@@ -126,19 +129,45 @@ export function QuantizationLesson({ onOpenStudio }: { onOpenStudio: () => void 
           next: "Compare with the BF16-weight output.",
         };
 
+  const destinations = [
+    { href: "#lesson", title: "Animated lesson", description: "Follow one weight from rounding to the dot product.", icon: Play, color: "gold" },
+    { href: "?view=basic", title: "Basic lab", description: "Edit small Q, K, and V matrices and inspect the results.", icon: Grid2X2, color: "blue" },
+    { href: "?view=advanced", title: "Advanced lab", description: "Calibrate a matrix and trace its bits through GPU memory.", icon: Workflow, color: "blue" },
+    { href: `?view=compare&weight=${cell}`, title: "Weight comparison", description: "Play two format configurations side by side.", icon: GitCompareArrows, color: "gold" },
+    { href: "#rounding-boundary", title: "Rounding boundary", description: "Drag a weight across a fixed INT4 threshold.", icon: SlidersHorizontal, color: "blue" },
+    { href: "#compression", title: "Compression experiment", description: "Prune weights and count packed codes, mask, and scale.", icon: Layers, color: "green" },
+    { href: "#model-storage", title: "Model weight storage", description: "Compare weight footprints and look up the symbols.", icon: HardDrive, color: "green" },
+    { href: "?view=kv-cache", title: "KV cache & GPU memory", description: "Estimate Qwen3.5-9B memory on an A100 or L4.", icon: Calculator, color: "green" },
+  ];
+
   return (
     <main className="quant-lesson">
       <header className="lesson-header">
         <div className="lesson-shell lesson-header-inner">
           <a className="lesson-brand" href="./" aria-label="Quantization Studio home"><AudioLines size={19} /> Quantization Studio</a>
-          <button className="lesson-lab" onClick={onOpenStudio}>Open lab <ArrowRight size={16} /></button>
         </div>
       </header>
 
       <div className="lesson-shell">
-        <div className="lesson-intro">
+        <section className="studio-overview" aria-labelledby="studio-title">
+          <h1 id="studio-title">Explore quantization</h1>
+          <p>See how fewer bits change model weights, GPU memory, and the output of a layer.</p>
+          <nav className="studio-destinations" aria-label="Explore Quantization Studio">
+            {destinations.map(({ href, title, description, icon: Icon, color }) => (
+              <a key={title} href={href} className="studio-destination" data-color={color}>
+                <Icon className="studio-destination-icon" size={19} aria-hidden="true" />
+                <span className="studio-destination-label"><strong>{title}</strong><small>{description}</small></span>
+                {href.startsWith("#")
+                  ? <ArrowDown className="studio-destination-arrow" size={15} aria-hidden="true" />
+                  : <ArrowRight className="studio-destination-arrow" size={15} aria-hidden="true" />}
+              </a>
+            ))}
+          </nav>
+        </section>
+
+        <div id="lesson" className="lesson-intro">
           <div>
-            <h1>Where does the precision go?</h1>
+            <h2>Where does the precision go?</h2>
             <p>Quantization stores model weights with fewer bits. Follow one weight and see how the approximation changes the answer.</p>
           </div>
           <div className="lesson-mode-groups">
@@ -154,13 +183,6 @@ export function QuantizationLesson({ onOpenStudio }: { onOpenStudio: () => void 
             </div>
           </div>
         </div>
-
-        <nav className="lesson-experiment-links" aria-label="Lesson experiments">
-          <a href="#rounding-boundary">Try a rounding boundary</a>
-          <a href={`?view=compare&weight=${cell}`}>Compare weight configurations</a>
-          <a href="#compression">Explore model compression</a>
-          <a href="?view=kv-cache">KV cache &amp; GPU memory</a>
-        </nav>
 
         <section className="lesson-player" aria-label="Interactive quantization lesson">
           <nav className="lesson-chapters" aria-label="Lesson chapters">
@@ -304,7 +326,7 @@ export function QuantizationLesson({ onOpenStudio }: { onOpenStudio: () => void 
           </div>
           {reducedMotion && <p className="lesson-motion-note">Select a chapter or use the scrubber to step through the lesson.</p>}
         </section>
-        <div className="lesson-references">
+        <div id="model-storage" className="lesson-references">
           <ModelStorage initial="BF16" formats={WEIGHT_FORMATS} selected={format} />
           <SymbolLegend />
         </div>

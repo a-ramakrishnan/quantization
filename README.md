@@ -6,6 +6,8 @@ An interactive guide to what happens when a model weight is stored with fewer bi
 
 ## What you can explore
 
+The home page links directly to every walkthrough, lab, experiment, and calculator.
+
 | View | Try this |
 | --- | --- |
 | **Opening lesson** | Follow the same BF16 weight through INT4, INT8, FP8, or FP16. Drag across a rounding boundary and watch two different weights land on the same code. |
