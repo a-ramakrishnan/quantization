@@ -37,6 +37,19 @@ describe("format journey", () => {
     expect(floatBitsFor("BF16", 1).hex).toBe("0x3F80");
     expect(floatBitsFor("FP8", 1).hex).toBe("0x38");
   });
+  it.each([
+    { format: "FP8", input: 0.001, value: 2 ** -9, hex: "0x01" },
+    { format: "FP8", input: 0.015, value: 2 ** -6, hex: "0x08" },
+    { format: "FP8", input: 1.0625, value: 1, hex: "0x38" },
+    { format: "FP16", input: 3 * 2 ** -25, value: 2 ** -23, hex: "0x0002" },
+    { format: "FP16", input: 1e-8, value: 0, hex: "0x0000" },
+    { format: "FP16", input: -0, value: -0, hex: "0x8000" },
+    { format: "BF16", input: 1.00390625, value: 1, hex: "0x3F80" },
+  ] as const)("reconstructs $format input $input consistently with its bits", ({ format, input, value, hex }) => {
+    const result = quantize([[input]], { format, symmetric: true, granularity: "tensor", alpha: 1 });
+    expect(result.deq[0]![0]).toBe(value);
+    expect(floatBitsFor(format, input).hex).toBe(hex);
+  });
   it("INT4 symmetric row max maps to 7", () => {
     expect(quantRowSym([-1, 0.5, 1], 4).q).toEqual([-7, 4, 7]);
   });

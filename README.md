@@ -4,6 +4,13 @@ An interactive **React + TypeScript + Tailwind CSS** visualizer that walks step-
 
 > Repository: [github.com/a-ramakrishnan/quantization](https://github.com/a-ramakrishnan/quantization)
 
+## Try the walkthroughs
+
+- The opening lesson offers a fixed-scale INT4 rounding experiment and a toy compression example with an explicit sparsity mask. **Compare weight configurations** opens two synchronized lanes with independent INT4, INT8, FP8, FP16, W8A16, and W8A8 settings for the same selected weight and row.
+- In **Open lab → Advanced → Trace one weight**, select a cell from the live matrix. Use **Previous operation**, **Next operation**, or the scrubber to see the current value, the operation that produced it, and what happens next. Changes to the lab’s quantization settings feed the same walkthrough.
+- **KV cache & GPU memory** estimates Qwen3.5-9B weight storage, full-attention cache, and fixed DeltaNet state on an NVIDIA A100 or L4. Weight precision, KV precision, context, and replica count are separate inputs.
+- The compression example counts payload, mask, and scale bytes for eight weights. The 9B chart is a separate weight-storage estimate, and the inference views illustrate the arithmetic with simulated inputs.
+
 ---
 
 ## Guided 4-Stage Interactive Timeline
@@ -22,7 +29,7 @@ Instead of overwhelming you with every chart at once, the app unfolds as a progr
    - **Live Step-by-Step Math Breakdown**: Exact numbers plugged into every formula for the selected cell (or sign/exponent/mantissa bit-field layout for BF16/FP16/FP8).
    - **Progressive Format Journey & INT4 Bit-Packing**:
      - Track an 8-weight Transformer row (or outlier row) across `FP32 → FP16 → BF16 → INT8 → Packed INT4`.
-     - Inspect physical **INT4 nibble bit-packing** (two 4-bit two's-complement weights packed per byte, e.g. `-7, -6` → `1001 1010` → `0x9A`) and **9B-parameter LLM memory footprints** (`36 GB` FP32 → `18 GB` FP16/BF16 → `9 GB` INT8 → `~4.64 GB` INT4 Group-128).
+     - Inspect physical **INT4 nibble bit-packing** (two 4-bit two's-complement weights packed per byte, e.g. `-7, -6` → `1001 1010` → `0x9A`) and estimate **9B-parameter weight storage** with one FP16 scale per 128 integer weights (`36 GB` FP32, `18 GB` FP16/BF16, `9.14 GB` INT8, and `4.64 GB` INT4).
 
 3. **Stage 3 — GPU Memory Hierarchy & On-the-Fly Dequantization**
    - **Break Down Boxes Independently**: Step through each hardware unit one by one (**Host CPU/Calibrator**, **GPU HBM/VRAM**, **L2 → SM SRAM**, **SM Register File Dequantizer**, **Tensor Core Accumulator**) to see how your weight row transforms inside each box.

@@ -5,9 +5,10 @@ import { cn } from "@/lib/utils";
 import { bytesFor, getFormat, matVec } from "@/utils/quantization";
 import type { Matrix, QuantConfig, QuantResult } from "@/types/quantization";
 import { MatrixGrid } from "./MatrixGrid";
+import { getGpuWeightTrace, reconstructionFormula, traceNumber } from "./gpu-weight-trace";
 
-const v4 = (a: number[], d = 3) =>
-  `[${a.map((x) => (Number.isInteger(x) ? x : x.toFixed(d))).join(", ")}]`;
+const v4 = (values: readonly (number | string)[]) =>
+  `[${values.map(value => typeof value === "number" ? traceNumber(value) : value).join(", ")}]`;
 
 function Tensor({ name, value, note }: { name: string; value: string; note?: string }) {
   return (
@@ -50,13 +51,13 @@ const INFO: Record<BlockId, { title: string; role: string; why: string }> = {
   },
   reg: {
     title: "Register File · Dequantizer",
-    role: "Each thread unpacks nibbles and computes Ŵ = S·(W_q − Z) in FP16 registers.",
+    role: "In this weight-only example, the kernel reads the stored weights and reconstructs integer codes as Ŵ = S·(W_q − Z).",
     why: "Ŵ lives only in registers — it's never written back to HBM, so the bandwidth saving is kept.",
   },
   tc: {
     title: "Tensor Cores + FP32 Accumulators",
-    role: "Perform the FP16 × FP16 multiply with FP32 accumulation: ŷ_i = Σ Ŵ_ij · x_j.",
-    why: "Math stays in 16-bit (A16), so accuracy is preserved while memory traffic shrinks.",
+    role: "A GPU kernel can multiply FP16 operands and accumulate in FP32. This view computes ŷ_i = Σ Ŵ_ij · x_j with JavaScript numbers.",
+    why: "The example isolates how storing weights in a narrower format affects the dot product.",
   },
 };
 
@@ -64,8 +65,8 @@ export function Stage3({
   W,
   cfg,
   result,
-  row,
-  setRow,
+  selected,
+  onSelect,
   x,
   onBack,
   onNext,
@@ -73,12 +74,13 @@ export function Stage3({
   W: Matrix;
   cfg: QuantConfig;
   result: QuantResult;
-  row: number;
-  setRow: (r: number) => void;
+  selected: [number, number];
+  onSelect: (cell: [number, number]) => void;
   x: number[];
   onBack: () => void;
   onNext: () => void;
 }) {
+  const [row, column] = selected;
   const [mode, setMode] = useState<"boxes" | "together">("boxes");
   const [box, setBox] = useState(0);
   const f = getFormat(cfg.format);
@@ -89,54 +91,57 @@ export function Stage3({
   const blocks = qRow.map((_, c) => result.blockOf(row, c));
   const S = isInt ? blocks.map((b) => result.params!.scales[b]!) : [];
   const Z = isInt ? blocks.map((b) => result.params!.zeros[b]!) : [];
+  const trace = getGpuWeightTrace(cfg.format, result, selected);
+  const original = wRow[column]!;
+  const error = original - trace.reconstructed;
+  const payload = v4(trace.payload.items);
+  const payloadLabel = cfg.format === "INT4" ? "Packed row bytes (hex)" : isInt ? "Stored row bit patterns" : "Stored row bits (hex)";
+  const metadata = isInt ? [["Scale S and zero-point Z by column", `S = ${v4(S)} · Z = ${v4(Z)}`]] : [];
   const nMeta = result.params?.scales.length ?? 0;
   const fp32B = bytesFor(16, 32),
     qB = bytesFor(16, f.bits) + nMeta * 4;
   const yi = matVec([dRow], x)[0]!;
-  const sz = isInt ? `S=${v4(S, 4)}  Z=${v4(Z)}` : "no scale (native float)";
 
   const BOXES = [
     {
       title: "Host CPU / Calibrator",
       inp: [["W[row] FP32", v4(wRow)]],
-      out: [
-        [`W_q ${f.label}`, v4(qRow, 4)],
-        ["S, Z", sz],
-      ],
-      text: "Offline, the CPU inspects the weight range, computes the scale and zero-point, and rounds every weight to the target format. This happens once, before deployment.",
+      out: [[payloadLabel, payload], ...metadata],
+      text: isInt
+        ? "The CPU calibrates the scale and zero-point, then rounds weights onto the integer grid and stores the codes."
+        : `The CPU rounds each weight to ${f.label} and stores the encoded bits.`,
     },
     {
       title: "GPU HBM / VRAM",
-      inp: [["W_q + S, Z", `${16} weights + ${nMeta} meta`]],
-      out: [["Stored bytes", `${qB} B vs ${fp32B} B FP32 — ${(fp32B / qB).toFixed(1)}× smaller`]],
-      text: `The packed ${f.label} weights${nMeta ? ` and ${nMeta} scale/zero pair${nMeta > 1 ? "s" : ""}` : ""} sit in HBM. Every token generation reads all of them, so their size directly sets the memory bandwidth cost.`,
+      inp: [[payloadLabel, payload], ...metadata],
+      out: [[payloadLabel, payload], ["Matrix storage estimate", `${qB} B vs ${fp32B} B FP32`]],
+      text: `HBM holds the exact ${f.label} bits the CPU uploaded. Copying the row leaves those bits intact.`,
     },
     {
       title: "L2 Cache → SM Shared Memory (SRAM)",
-      inp: [["HBM tile", v4(qRow, 4)]],
-      out: [
-        ["SRAM: W_q tile", v4(qRow, 4)],
-        ["SRAM: S, Z", sz],
-        ["SRAM: X", v4(x)],
-      ],
-      text: "The kernel streams a tile of packed weights through L2 into each SM's shared memory, alongside the matching scales and the activation vector X (FP16).",
+      inp: [[payloadLabel, payload]],
+      out: [[payloadLabel, payload], ...metadata, ["Activations x", v4(x)]],
+      text: "The row travels through the cache and shared memory with the same stored bit patterns.",
     },
     {
       title: "SM Register File (Dequantizer)",
-      inp: [["W_q, S, Z", isInt ? `${v4(qRow)} · S, Z` : v4(qRow, 4)]],
-      out: [["Ŵ FP16 (registers)", v4(dRow, 4)]],
+      inp: [[payloadLabel, payload], ...metadata],
+      out: [
+        ...(isInt ? [["Decoded integer codes q", v4(qRow)]] : []),
+        ["Reconstructed row Ŵ", v4(dRow)],
+      ],
       text: isInt
-        ? "Each thread unpacks its nibbles and computes Ŵ = S·(W_q − Z) right in registers. Ŵ is never written back to HBM — it exists only for this multiply."
-        : `${f.label} values are up-converted to FP16 in registers on the fly.`,
+        ? "The registers decode each integer code and calculate Ŵ = (q − Z) × S using that weight’s scale and zero-point."
+        : `The registers decode the stored ${f.label} bits as the rounded weights used in the multiply.`,
     },
     {
       title: "Tensor Cores & FP32 Accumulators",
       inp: [
-        ["Ŵ[row]", v4(dRow, 4)],
+        ["Reconstructed row Ŵ", v4(dRow)],
         ["x", v4(x)],
       ],
       out: [[`ŷ[${row}]`, yi.toFixed(5)]],
-      text: `Tensor cores multiply FP16 Ŵ by FP16 x and accumulate in FP32: ŷ_${row} = Σ_j Ŵ_${row},j · x_j = ${dRow.map((d, j) => `${d.toFixed(2)}·${x[j]}`).join(" + ")}.`,
+      text: `The simulated dot product uses ŷ_${row} = Σ_j Ŵ_${row},j · x_j. JavaScript evaluates the products and sum using the reconstructed weights and the entered activations.`,
     },
   ];
   const B = BOXES[box]!;
@@ -169,7 +174,7 @@ export function Stage3({
           {[0, 1, 2, 3].map((i) => (
             <button
               key={i}
-              onClick={() => setRow(i)}
+              onClick={() => onSelect([i, column])}
               className={cn(
                 "h-7 w-7 rounded font-mono text-xs",
                 row === i ? "bg-primary text-primary-foreground" : "bg-card border",
@@ -227,6 +232,22 @@ export function Stage3({
             <p className="mt-5 rounded-lg bg-muted/60 p-4 text-sm leading-relaxed text-muted-foreground">
               {B.text}
             </p>
+            {box === 3 && (
+              <aside className="mt-5 space-y-3 rounded-lg border p-4" aria-label="Compare original and reconstructed weight">
+                <h4 className="font-medium">Compare W[{row},{column}] before and after reconstruction</h4>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Tensor name="Original weight w" value={traceNumber(original)} />
+                  <Tensor name="Reconstructed weight ŵ" value={traceNumber(trace.reconstructed)} />
+                  <Tensor name="Difference w − ŵ" value={traceNumber(error)} />
+                </div>
+                <p className="font-mono text-sm">{reconstructionFormula(trace)}</p>
+                <p className="text-sm text-muted-foreground">
+                  {error === 0
+                    ? "This weight is exactly representable with the current settings, so the decoded value matches the original."
+                    : "Quantization changed this weight when it was first rounded. Reconstruction recovers the stored approximation for the dot product."}
+                </p>
+              </aside>
+            )}
             <div className="mt-5 flex flex-wrap justify-between gap-2">
               <div className="flex gap-2">
                 <Button
@@ -256,7 +277,7 @@ export function Stage3({
           </div>
         </div>
       ) : (
-        <Together result={result} W={W} f={f} />
+        <Together result={result} W={W} f={f} cell={selected} setCell={onSelect} />
       )}
 
       <div className="flex justify-between gap-2">
@@ -276,13 +297,16 @@ function Together({
   result,
   W,
   f,
+  cell,
+  setCell,
 }: {
   result: QuantResult;
   W: Matrix;
   f: ReturnType<typeof getFormat>;
+  cell: [number, number];
+  setCell: (cell: [number, number]) => void;
 }) {
   const [sel, setSel] = useState<BlockId>("reg");
-  const [cell, setCell] = useState<[number, number]>([0, 0]);
   const err = W.map((r, i) => r.map((w, j) => w - result.deq[i]![j]!));
   const [cr, cc] = cell;
   const wVal = W[cr]![cc]!;
@@ -424,7 +448,7 @@ function Together({
               w={150}
               h={70}
               label="Tensor Cores"
-              sub="FP16×FP16 → FP32"
+              sub="Reconstructed dot product"
             />
             <Flow d="M120 70 L148 70" />
             <Flow d="M220 70 L248 70" />
@@ -500,7 +524,7 @@ function Together({
         ) : (
           <div className="font-mono leading-relaxed text-muted-foreground">
             <span className="text-foreground">Stored {f.label}</span>
-            {" "}──up-convert to FP16──▶{" "}
+            {" "}──read rounded value──▶{" "}
             <b className="text-primary">Ŵ = {deqVal.toFixed(4)}</b>
             {" "}──Error──▶{" "}
             <span className="text-foreground">

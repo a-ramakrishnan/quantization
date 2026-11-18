@@ -17,6 +17,8 @@ import { Stage3 } from "./Stage3";
 import { Stage2 } from "./Stage2";
 import { BasicMode } from "./BasicMode";
 import { StageAnimation } from "./StageAnimation";
+import { SymbolLegend } from "./LessonReference";
+import { WeightWalkthrough } from "./WeightWalkthrough";
 
 const STAGES = [
   "Weights & Calibrate",
@@ -25,7 +27,7 @@ const STAGES = [
   "Input x & Forward Pass (y = Wx vs ŷ = Ŵx)",
 ];
 
-export function QuantApp() {
+export function QuantApp({ onOpenLesson }: { onOpenLesson: () => void }) {
   const [mode, setMode] = useState<"basic" | "advanced">("basic");
   const [dark, setDark] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -64,6 +66,7 @@ export function QuantApp() {
             Linear Layer Quantization &amp; GPU Execution
           </h1>
           <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={onOpenLesson}>Lesson</Button>
             <div role="group" aria-label="Experience mode" className="flex rounded-lg border p-0.5">
               {(["basic", "advanced"] as const).map(value => (
                 <Button key={value} size="sm" variant={mode === value ? "secondary" : "ghost"} aria-pressed={mode === value} onClick={() => setMode(value)}>
@@ -108,10 +111,12 @@ export function QuantApp() {
         <section className="py-12">
           <p className="font-mono text-sm text-primary">y = Wx</p>
           <h2 className="mt-2 max-w-3xl font-serif text-4xl leading-tight sm:text-5xl">
-            How a 4×4 weight matrix shrinks, travels to the GPU, and still computes the right
-            answer.
+            Follow a 4×4 weight matrix from calibration to the GPU and measure how rounding changes the output.
           </h2>
         </section>
+
+        <WeightWalkthrough key={result.params ? "integer" : "float"} W={W} cfg={cfg} result={result}
+          x={X} selected={sel} onSelect={setSel} enabled={mode === "advanced"} />
 
         <nav className="mb-10 grid grid-cols-2 gap-2 md:grid-cols-4">
           {STAGES.map((s, i) => {
@@ -162,7 +167,7 @@ export function QuantApp() {
                 <span className="font-mono text-sm text-primary">0{i + 1}</span>
                 <h2 className="font-serif text-3xl">{s}</h2>
               </div>
-              <StageAnimation stage={i} W={W} cfg={cfg} result={result} x={X} selected={sel} active={mode === "advanced"} />
+              <StageAnimation stage={i} W={W} cfg={cfg} result={result} x={X} selected={sel} onSelect={setSel} active={mode === "advanced"} />
               {i === 0 && (
                 <Stage1
                   W={W}
@@ -197,8 +202,8 @@ export function QuantApp() {
                   W={W}
                   cfg={cfg}
                   result={result}
-                  row={sel[0]}
-                  setRow={(r) => setSel([r, sel[1]])}
+                  selected={sel}
+                  onSelect={setSel}
                   x={X}
                   onBack={() => go(2)}
                   onNext={() => go(4)}
@@ -222,6 +227,7 @@ export function QuantApp() {
             </section>
           ))}
         </div>
+        <SymbolLegend />
       </main>
     </div>
   );

@@ -7,6 +7,7 @@ import type { BasicFormat, ProjectionId } from "@/utils/basic-quantization";
 import { floatBitsFor, getFormat, packNibbles } from "@/utils/quantization";
 import { MatrixGrid } from "./MatrixGrid";
 import { QuantizationScene } from "./QuantizationScene";
+import { ModelStorage, SymbolLegend } from "./LessonReference";
 
 const NAMES = { Q: "Query", K: "Key", V: "Value" };
 const shortNum = (value: number) => Number(value.toFixed(4)).toString();
@@ -30,7 +31,7 @@ export function BasicMode({ active = true }: { active?: boolean }) {
 
   return (
     <main className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-      <QuantizationScene projection={current} format={format} selected={selected} active={active} />
+      <QuantizationScene projection={current} format={format} selected={selected} cell={cell} active={active} />
 
       <aside className="flex items-start gap-3 rounded-lg border border-primary/20 bg-accent/40 p-4 text-sm" aria-label="Basic assumptions">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -150,6 +151,10 @@ export function BasicMode({ active = true }: { active?: boolean }) {
           })}
         </div>
       </section>
+      <div className="lesson-references">
+        <ModelStorage initial="BF16" formats={[format]} selected={format} />
+        <SymbolLegend />
+      </div>
     </main>
   );
 }
