@@ -134,6 +134,7 @@ export function QuantizationLesson() {
     { href: "?view=basic", title: "Basic lab", description: "Edit small Q, K, and V matrices and inspect the results.", icon: Grid2X2, color: "blue" },
     { href: "?view=advanced", title: "Advanced lab", description: "Calibrate a matrix and trace its bits through GPU memory.", icon: Workflow, color: "blue" },
     { href: `?view=compare&weight=${cell}`, title: "Weight comparison", description: "Play two format configurations side by side.", icon: GitCompareArrows, color: "gold" },
+    { href: "?view=next-word", title: "Predict the next word", description: "Run a model in your browser and explore what one rounded weight can change.", icon: AudioLines, color: "gold" },
     { href: "#rounding-boundary", title: "Rounding boundary", description: "Drag a weight across a fixed INT4 threshold.", icon: SlidersHorizontal, color: "blue" },
     { href: "#compression", title: "Compression experiment", description: "Prune weights and count packed codes, mask, and scale.", icon: Layers, color: "green" },
     { href: "#model-storage", title: "Model weight storage", description: "Compare weight footprints and look up the symbols.", icon: HardDrive, color: "green" },
