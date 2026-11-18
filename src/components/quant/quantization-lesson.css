@@ -25,14 +25,31 @@
 .lesson-lab { border: 1px solid var(--lesson-border); padding: 8px 12px; border-radius: 7px; color: var(--lesson-muted); }
 .lesson-lab:hover { color: var(--lesson-text); background: var(--lesson-surface); }
 
-.lesson-intro { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding: clamp(30px, 5vw, 63px) 0 28px; }
-.lesson-intro h1 {
+.studio-overview { padding-top: clamp(26px, 4vw, 48px); }
+.studio-overview h1, .lesson-intro h2 {
   font-family: "Instrument Serif", Georgia, serif;
-  font-size: clamp(2.7rem, 6.4vw, 5.5rem);
   font-weight: 400;
   letter-spacing: -0.036em;
   line-height: 0.99;
 }
+.studio-overview h1 { font-size: clamp(3rem, 6vw, 5.1rem); }
+.studio-overview > p { margin-top: 0.55rem; color: var(--lesson-muted); }
+.studio-destinations { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.65rem; margin-top: 1.15rem; }
+.studio-destination {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.55rem;
+  align-items: start; padding: 0.85rem 0.75rem;
+  background: var(--lesson-panel); border: 1px solid var(--lesson-border); border-radius: 9px;
+}
+.studio-destination:hover { background: var(--lesson-surface); border-color: var(--lesson-blue); }
+.studio-destination-icon { color: var(--lesson-blue); margin-top: 0.1rem; }
+.studio-destination[data-color="gold"] .studio-destination-icon { color: var(--lesson-gold); }
+.studio-destination[data-color="green"] .studio-destination-icon { color: var(--lesson-green); }
+.studio-destination-label { display: grid; gap: 0.25rem; }
+.studio-destination-label strong { font-size: 0.85rem; line-height: 1.25; }
+.studio-destination-label small { color: var(--lesson-muted); font-size: 0.74rem; line-height: 1.35; }
+.studio-destination-arrow { color: var(--lesson-muted); }
+.lesson-intro { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding: 32px 0 22px; scroll-margin-top: 14px; }
+.lesson-intro h2 { font-size: clamp(2.3rem, 4vw, 3.45rem); }
 .lesson-intro p { margin-top: 14px; color: var(--lesson-muted); font-size: 1rem; }
 .lesson-format { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--lesson-border); border-radius: 8px; }
 .lesson-format button { padding: 6px 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.8rem; color: var(--lesson-muted); }
@@ -271,8 +288,15 @@
 
 .lesson-experiment { margin-top: 14px; scroll-margin-top: 1rem; padding: 20px; }
 .lesson-experiment h3 { font: 400 1.9rem/1.05 "Instrument Serif", Georgia, serif; }
-.lesson-experiment a, .lesson-experiment-links a { color: var(--lesson-blue); text-decoration: underline; text-underline-offset: 3px; }
-.lesson-experiment-links { display: flex; flex-wrap: wrap; gap: 7px 20px; margin-bottom: 14px; font-size: 0.8rem; }
+.lesson-experiment a { color: var(--lesson-blue); text-decoration: underline; text-underline-offset: 3px; }
+#model-storage { scroll-margin-top: 1rem; }
+@media (max-width: 915px) {
+  .studio-destinations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+  .studio-destination { grid-template-columns: auto minmax(0, 1fr); gap: 0.4rem; padding: 0.68rem 0.55rem; }
+  .studio-destination-arrow { display: none; }
+}
 .experiment-boundary { position: relative; height: 5.4rem; margin: 1.2rem 0 0.2rem; }
 .boundary-track { position: absolute; inset: 50% 0 auto; height: 2px; background: var(--lesson-border); }
 .boundary-mark { position: absolute; top: 0; height: 70%; border-left: 1px dashed var(--lesson-muted); }
