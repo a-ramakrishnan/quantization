@@ -1,7 +1,10 @@
+import { lazy, Suspense } from 'react';
 import { QuantApp } from '@/components/quant/QuantApp';
 import { QuantizationLesson } from '@/components/quant/QuantizationLesson';
 import { WeightComparison } from '@/components/quant/WeightComparison';
 import { KvCachePage } from '@/components/quant/KvCachePage';
+
+const NextWordPage = lazy(() => import('@/components/quant/NextWordPage'));
 
 function StudioPage() {
   const query = new URLSearchParams(window.location.search);
@@ -10,6 +13,7 @@ function StudioPage() {
     return <WeightComparison initialWeight={Number(query.get('weight'))} />;
   }
   if (view === 'kv-cache') return <KvCachePage />;
+  if (view === 'next-word') return <Suspense fallback={<main role="status">Loading the prediction lesson…</main>}><NextWordPage /></Suspense>;
   if (view === 'basic' || view === 'advanced') return <QuantApp initialMode={view} />;
   return <QuantizationLesson />;
 }
