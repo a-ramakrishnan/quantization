@@ -14,7 +14,7 @@ The home page links directly to every walkthrough, lab, experiment, and calculat
 | --- | --- |
 | **Opening lesson** | Follow the same BF16 weight through INT4, INT8, FP8, or FP16. Drag across a rounding boundary and watch two different weights land on the same code. |
 | **Weight comparison** | Play two synchronized lanes through encoding, reconstruction, and the dot product. Start with W8A16 vs. W8A8 and watch identical INT8 weight bits feed different activation and compute paths. |
-| **Next-word animation** | Enter your own text and predict two words locally with DistilGPT2. Approve the model and runtime downloads before the first prediction. The animation uses the model’s first-token scores to simulate an INT4 weight change. |
+| **Next-word animation** | Enter your own text and predict two words locally with DistilGPT2. Approve the model and runtime downloads before the first prediction. Compare two complete next-word paths, simulate a weight rounding change, and follow each branch to see what the model predicts next. |
 | **Basic lab** | Edit small query, key, and value projection matrices. Inspect the stored bits, decoded weights, and how each change affects the output. |
 | **Advanced lab** | Calibrate a 4×4 matrix, choose symmetric or affine quantization, and test per-tensor, per-row, or per-group scales and clipping. Select **Trace one weight** to step through each operation. |
 | **Compression experiment** | Compare dense BF16, dense INT4, and sparse INT4. Encode the kept codes with a Huffman tree, decode the packed bytes, and verify the same pruned dot product. Inspect the file and loaded weight sizes, including tree, mask, scale, and padding. |
