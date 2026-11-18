@@ -63,3 +63,10 @@
 .kv-comparison-table td { white-space: nowrap; font-family: var(--font-mono); }
 .kv-table-verdict { color: var(--lesson-rose); }
 .kv-table-verdict[data-fits="true"] { color: var(--lesson-green); }
+.kv-serving { margin-top: 0.85rem; }
+.kv-serving > .kv-table-wrap + p { margin-top: 0.75rem; }
+.kv-planner-table small { display: block; font-size: 0.7rem; font-weight: 400; color: var(--lesson-muted); }
+.kv-planner-table :is(th, td) { white-space: nowrap; }
+.kv-planner-table td[data-best="true"] strong { color: var(--lesson-green); }
+.kv-planner-table td button { display: block; width: 100%; text-align: left; padding: 0.2rem; border-radius: 3px; }
+.kv-planner-table td button:is(:hover, :focus-visible) { background: var(--lesson-surface); outline: 1px solid var(--lesson-blue); }

@@ -321,6 +321,24 @@
 .compression-codes [data-kept="false"] { color: var(--lesson-muted); background: var(--lesson-bg); }
 .compression-sizes { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 1rem; font-size: 0.78rem; }
 .compression-sizes dd { font-family: var(--font-mono); font-weight: 600; color: var(--lesson-green); }
+.compression-round-trip { margin-top: 1.35rem; padding-top: 1.25rem; border-top: 1px solid var(--lesson-border); }
+.compression-round-trip h4 { font: 400 1.65rem/1.1 "Instrument Serif", Georgia, serif; }
+.compression-stage { min-width: 0; }
+.compression-stage .operation-readout { margin: 0.8rem 0; }
+.compression-histogram { max-width: 24rem; padding-block: 0.4rem; }
+.compression-histogram li { display: grid; grid-template-columns: 2rem minmax(0, 1fr) 3rem; align-items: center; gap: 0.5rem; padding: 0.18rem 0; font: 0.78rem var(--font-mono); }
+.compression-frequency { height: 0.5rem; background: var(--lesson-blue); border-radius: 2px; }
+.compression-tree { width: max-content; max-width: 100%; overflow-x: auto; padding: 0.5rem; text-align: center; font: 0.78rem var(--font-mono); }
+.compression-tree ul { display: flex; justify-content: center; min-width: max-content; }
+.compression-tree li { display: grid; align-content: start; justify-items: center; min-width: 2.8rem; border-top: 1px solid var(--lesson-border); margin-top: 0.2rem; }
+.compression-edge { border-left: 1px solid var(--lesson-border); padding: 0.13rem 0.32rem; color: var(--lesson-muted); }
+.compression-leaf { color: var(--lesson-gold); border: 1px solid var(--lesson-border); border-radius: 4px; padding: 0.15rem 0.3rem; }
+.compression-tree [data-active="true"] { border-color: var(--lesson-gold); background: var(--lesson-gold); color: var(--lesson-bg); }
+.compression-stream { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.5rem 0; }
+.compression-stream li { display: grid; justify-items: center; min-width: 3rem; border: 1px solid var(--lesson-border); border-radius: 5px; padding: 0.3rem 0.45rem; font: 0.78rem var(--font-mono); }
+.compression-stream small { color: var(--lesson-muted); }
+.compression-stream [data-active="true"] { border-color: var(--lesson-gold); color: var(--lesson-gold); }
+.compression-stream [data-pending="true"] { opacity: 0.6; }
 @media (max-width: 600px) {
   .compression-codes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }

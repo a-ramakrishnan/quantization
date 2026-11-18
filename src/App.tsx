@@ -17,13 +17,16 @@ function StudioPage() {
 export function App() {
   return (
     <>
-      <aside className="academic-notice" aria-label="Academic use notice">
-        <div>
-          <strong>For academic purposes.</strong>{" "}
-          We strive to keep the information up to date. Calculations are illustrative and use the assumptions shown.
-        </div>
-      </aside>
       <StudioPage />
+      <footer className="studio-footer">
+        <div className="studio-footer-inner">
+          <section aria-labelledby="academic-use">
+            <h2 id="academic-use">Academic use disclaimer</h2>
+            <p>Quantization Studio is provided for academic and educational purposes. We strive to keep the information up to date. Calculations and simulations are illustrative and depend on the inputs and assumptions shown. Model specifications and software support can change, and published benchmarks describe the tested workloads and systems. Verify the source specifications and measure your own workload before sizing a deployment.</p>
+          </section>
+          <a href="https://github.com/a-ramakrishnan/quantization">View project on GitHub ↗</a>
+        </div>
+      </footer>
     </>
   );
 }
