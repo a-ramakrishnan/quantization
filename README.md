@@ -4,6 +4,8 @@ An interactive guide to what happens when a model weight is stored with fewer bi
 
 [**Open the interactive studio**](https://a-ramakrishnan.github.io/quantization/) · [Compare configurations](https://a-ramakrishnan.github.io/quantization/?view=compare) · [KV-cache memory calculator](https://a-ramakrishnan.github.io/quantization/?view=kv-cache)
 
+> **For academic purposes.** We strive to keep the information up to date. Calculations are illustrative and use the assumptions shown.
+
 ## What you can explore
 
 The home page links directly to every walkthrough, lab, experiment, and calculator.

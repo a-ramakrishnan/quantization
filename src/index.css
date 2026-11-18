@@ -189,6 +189,15 @@
 .math-theater button:hover { background: var(--theater-grid); color: var(--theater-ink); }
 .math-theater button[aria-label="Play animation"],
 .math-theater button[aria-label="Pause animation"] { background: var(--theater-gold); color: var(--theater); }
+.academic-notice {
+  background: var(--theater);
+  color: var(--theater-muted);
+  border-bottom: 1px solid var(--theater-grid);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.academic-notice > div { width: min(1160px, calc(100% - 32px)); margin-inline: auto; padding-block: 0.45rem; }
+.academic-notice strong { color: var(--theater-ink); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }

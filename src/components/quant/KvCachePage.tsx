@@ -152,7 +152,7 @@ export function KvCachePage() {
               </span>
             </div>
             <p className="kv-peak"><strong>{formatSize(result.peak)}</strong> / {formatSize(result.budget)} budget</p>
-            <p>{formatCount.format(result.sequencesPerGpu)} of {formatCount.format(inputs.batch)} sequences on the busiest GPU at {formatCount.format(inputs.context)} tokens each.</p>
+            <p>Estimate for {formatCount.format(result.sequencesPerGpu)} of {formatCount.format(inputs.batch)} sequences on the busiest GPU at {formatCount.format(inputs.context)} tokens each.</p>
             <div className="kv-stack" aria-hidden="true">
               {segments.map((bytes, i) => <div key={rowKinds[i]} className={`kv-segment kv-segment-${i}`} style={{ width: `${100 * bytes / chartLimit}%` }} />)}
               <span className="kv-budget-mark" style={{ left: `${100 * result.budget / chartLimit}%` }} />
