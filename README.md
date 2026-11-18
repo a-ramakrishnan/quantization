@@ -1,79 +1,55 @@
-# Linear Layer Quantization & GPU Execution Visualizer
+# Quantization Studio
 
-An interactive **React + TypeScript + Tailwind CSS** visualizer that walks step-by-step through how neural network weights in a linear layer ($y = Wx$) are **calibrated, compressed across BF16 / FP16 / FP8 / INT8 / INT4 / INT2, bit-packed in GPU HBM, streamed to SM Shared Memory, dequantized on-the-fly in registers, and multiplied in Tensor Cores**.
+An interactive guide to what happens when a model weight is stored with fewer bits. Follow one weight from calibration through GPU memory and into a dot product, then see how the same choices affect model storage and the KV cache.
 
-> Repository: [github.com/a-ramakrishnan/quantization](https://github.com/a-ramakrishnan/quantization)
+[**Open the interactive studio**](https://a-ramakrishnan.github.io/quantization/) · [Compare configurations](https://a-ramakrishnan.github.io/quantization/?view=compare) · [Qwen3.5-9B memory calculator](https://a-ramakrishnan.github.io/quantization/?view=kv-cache)
 
----
+## What you can explore
 
-## Guided 4-Stage Interactive Timeline
+| View | Try this |
+| --- | --- |
+| **Opening lesson** | Follow the same BF16 weight through INT4, INT8, FP8, or FP16. Drag across a rounding boundary and watch two different weights land on the same code. |
+| **Weight comparison** | Play two synchronized lanes through encoding, reconstruction, and the dot product. Start with W8A16 vs. W8A8 and watch identical INT8 weight bits feed different activation and compute paths. |
+| **Basic lab** | Edit small query, key, and value projection matrices. Inspect the stored bits, decoded weights, and how each change affects the output. |
+| **Advanced lab** | Calibrate a 4×4 matrix, choose symmetric or affine quantization, and test per-tensor, per-row, or per-group scales and clipping. Select **Trace one weight** to step through each operation. |
+| **Compression experiment** | Compare dense BF16, dense INT4, and sparse INT4. The byte count includes packed codes, the shared scale, and the sparsity mask. |
+| **KV-cache calculator** | Estimate Qwen3.5-9B memory on an NVIDIA L4 or A100. Change weight and cache precision independently, then vary context length and concurrency. |
 
-Instead of overwhelming you with every chart at once, the app unfolds as a progressive timeline (with a **Show All / Timeline View** toggle in the header):
+## A weight’s journey
 
-1. **Stage 1 — Weights & Calibrate**
-   - Pick a weight preset (*Normal*, *With Outliers*, *Shifted / Biased*, *Uniform*, *Random*) or edit any cell in the 4×4 FP32 weight matrix $W$.
-   - Choose a target format along the precision ladder: **`BF16` → `FP16` → `FP8 (E4M3)` → `INT8` → `INT4` → `INT2`**.
-   - For integer formats, configure **Symmetric vs. Asymmetric (Affine)**, **Per-Tensor / Per-Channel / Per-Group ($g=2$)** granularity, and **Outlier Clipping ($\alpha$)**.
-   - Immediately see the **First-Level Output**: observed range, target integer bounds, **Scale ($S$)**, and **Zero-Point ($Z$)**.
-
-2. **Stage 2 — Quantize & Format Journey (`FP32 → Target Format`)**
-   - Side-by-side **FP32 ($W$) → Stored ($W_q$ / FP8 Hex / BF16 / FP16)** matrices with clipping indicators.
-   - **Number-Line Bin Mapping**: Watch continuous FP32 weights snap to discrete integer buckets separated by $\Delta = S$.
-   - **Live Step-by-Step Math Breakdown**: Exact numbers plugged into every formula for the selected cell (or sign/exponent/mantissa bit-field layout for BF16/FP16/FP8).
-   - **Progressive Format Journey & INT4 Bit-Packing**:
-     - Track an 8-weight Transformer row (or outlier row) across `FP32 → FP16 → BF16 → INT8 → Packed INT4`.
-     - Inspect physical **INT4 nibble bit-packing** (two 4-bit two's-complement weights packed per byte, e.g. `-7, -6` → `1001 1010` → `0x9A`) and **9B-parameter LLM memory footprints** (`36 GB` FP32 → `18 GB` FP16/BF16 → `9 GB` INT8 → `~4.64 GB` INT4 Group-128).
-
-3. **Stage 3 — GPU Memory Hierarchy & On-the-Fly Dequantization**
-   - **Break Down Boxes Independently**: Step through each hardware unit one by one (**Host CPU/Calibrator**, **GPU HBM/VRAM**, **L2 → SM SRAM**, **SM Register File Dequantizer**, **Tensor Core Accumulator**) to see how your weight row transforms inside each box.
-   - **Reconstruct Together**: View the full unified **GPU Architecture & Dataflow** SVG diagram with animated data movement and clickable hardware inspector cards.
+The Advanced lab follows the same selected weight through four stages. For integer formats, the CPU maps it to a code using scale `S` and zero-point `Z`. GPU memory carries the encoded bits. The illustrative register step reconstructs the weight as `ŵ = (q − Z) × S` before the dot product.
 
 ```mermaid
 flowchart LR
-  Host["Host CPU / Calibrator\nQuantize W -> W_q, (S, Z)"] -->|PCIe| HBM["GPU HBM / VRAM\nStore Packed W_q + (S, Z) + X"]
-  HBM --> L2["L2 Cache\nTile Reuse"]
-  L2 --> SRAM["SM Shared Memory (SRAM)\nStage W_q, (S, Z), X Tiles"]
-  SRAM --> Reg["Register File\nDequantize W_hat = S*(W_q - Z)"]
-  Reg --> TC["Tensor Cores\nFP32 Accumulate y_hat = W_hat * X"]
-  TC -->|Write y_hat| HBM
+  W[Original weight] --> Code[Calibrate and encode]
+  Code --> HBM[GPU memory]
+  HBM --> SM[L2 and shared memory]
+  SM --> Reg[Decode in registers]
+  Reg --> Dot[Dot product]
 ```
 
-4. **Stage 4 — Linear Layer Forward Pass ($y = Wx$ vs. $\hat{y} = \hat{W}x$)**
-   - Edit the FP32 input activation vector $x$ and compare true $y = Wx$ against quantized $\hat{y} = \hat{W}x$.
-   - Inspect **Weight MSE**, **Weight SQNR (dB)**, **Output MSE**, **Cosine Similarity**, and **HBM Memory Savings**.
+For example, Advanced INT4 can take `W[1,2] = −0.602`, store code `−4` in the high nibble of `0xC1`, and reconstruct `−0.6577143` with the active scale. **Box 4** shows both values and their difference. The illustration and calculator run in your browser using simulated values.
 
----
+### From weight storage to inference memory
 
-## Supported Formats at a Glance
+At 8,192 cached tokens per sequence, raw BF16 attention KV for Qwen3.5-9B takes **256 MiB per sequence**. Switching only the cache to 8-bit reduces that to **128 MiB**. The calculator budgets the fixed state of the 24 Gated DeltaNet layers separately from the growing KV of the 8 full-attention layers. It uses one full model replica per GPU and displays the budgeting assumptions alongside the estimate. [Qwen model config](https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/config.json)
 
-| Format | Bits / Weight | Layout / Mapping | Scale Metadata | HBM Savings vs FP32 |
-| :--- | :---: | :--- | :---: | :---: |
-| **FP32** | 32 | `1S + 8E + 23M` | None | `1.0×` (baseline) |
-| **BF16** | 16 | `1S + 8E + 7M` (wide range) | None | `2.0×` |
-| **FP16** | 16 | `1S + 5E + 10M` (higher precision) | None | `2.0×` |
-| **FP8 (E4M3)** | 8 | `1S + 4E + 3M` (max `±448`) | Optional | `4.0×` |
-| **INT8** | 8 | `[-127, 127]` Sym / `[-128, 127]` Asym | $S$ (and $Z$) | `~4.0×` |
-| **INT4** | 4 | `[-7, 7]` Sym / `[-8, 7]` Asym (2 per byte) | $S$ (and $Z$) | `~6.4× – 8.0×` |
-| **INT2** | 2 | `[-1, 1]` Sym / `[-2, 1]` Asym | $S$ (and $Z$) | `~10.7× – 16.0×` |
+## Run locally
 
----
-
-## Getting Started
+Use Node.js 24 with npm.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Build for production:
-
 ```bash
+npm test
 npm run build
 ```
 
-## Contributing
+The app uses React, TypeScript, Tailwind CSS, Vite, and Vitest. GitHub Actions builds and tests pull requests. Pushes to `main` publish the static Vite build to GitHub Pages. [Deployment workflow](.github/workflows/pages.yml)
 
-Every check-in should go through a Pull Request:
-1. Create a feature branch (`git checkout -b feat/your-feature`).
-2. Commit your changes and run `npm run build` to verify TypeScript & Vite bundling.
-3. Open a Pull Request against `main`.
+## License
+
+[MIT](LICENSE)

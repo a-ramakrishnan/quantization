@@ -1,0 +1,53 @@
+.kv-intro { padding: clamp(27px, 5vw, 55px) 0 24px; }
+.kv-intro p:first-child { color: var(--lesson-gold); font: 0.77rem var(--font-mono); margin-bottom: 0.55rem; }
+.kv-intro h1 { font: 400 clamp(2.75rem, 7.5vw, 5.2rem)/0.98 "Instrument Serif", Georgia, serif; letter-spacing: -0.028em; }
+.kv-intro p:last-child { color: var(--lesson-muted); margin-top: 0.7rem; }
+.kv-grid { display: grid; grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr); gap: 0.85rem; align-items: start; }
+.kv-panel { padding: clamp(15px, 2vw, 22px); min-width: 0; }
+.kv-panel h2 { font: 400 1.85rem/1.08 "Instrument Serif", Georgia, serif; }
+.kv-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin: 1rem 0 0.7rem; }
+.kv-full { grid-column: 1 / -1; }
+.kv-field { display: grid; align-content: start; gap: 0.3rem; min-width: 0; font-size: 0.79rem; color: var(--lesson-muted); }
+.kv-field :is(input, select) {
+  width: 100%; min-width: 0; border: 1px solid var(--lesson-border); border-radius: 5px;
+  padding: 0.44rem 0.55rem; background: var(--lesson-bg); color: var(--lesson-text); font: 0.82rem var(--font-mono);
+}
+.kv-contexts { margin: -0.25rem 0 0; }
+.kv-results-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.65rem; }
+.kv-verdict { display: flex; gap: 0.32rem; align-items: center; color: var(--lesson-rose); border: 1px solid currentColor; border-radius: 20px; padding: 0.28rem 0.55rem; font-size: 0.74rem; }
+.kv-verdict[data-fits="true"] { color: var(--lesson-green); }
+.kv-panel .kv-peak { margin-top: 0.83rem; }
+.kv-peak strong { color: var(--lesson-text); font: 600 clamp(1.5rem, 3.4vw, 2.25rem) var(--font-mono); }
+.kv-stack { display: flex; position: relative; height: 0.84rem; background: var(--lesson-surface); border-radius: 4px; margin: 0.85rem 0; }
+.kv-segment { height: 100%; transition: width 180ms ease-out; }
+.kv-budget-mark { position: absolute; inset-block: -4px; width: 2px; background: var(--lesson-text); transition: left 180ms ease-out; }
+.kv-segment-0 { background: var(--lesson-blue); }
+.kv-segment-1 { background: var(--lesson-gold); }
+.kv-segment-2 { background: var(--lesson-green); }
+.kv-segment-3 { background: var(--lesson-muted); }
+.kv-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem 1rem; margin-bottom: 1rem; }
+.kv-legend div, .kv-summary div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.15rem 0.5rem; font-size: 0.76rem; }
+.kv-legend dt, .kv-explain h3 { display: flex; align-items: center; gap: 0.4rem; }
+.kv-legend i, .kv-explain i { width: 0.55rem; flex: 0 0 0.55rem; height: 0.55rem; border-radius: 2px; }
+.kv-legend dd, .kv-summary dd { font-family: var(--font-mono); }
+.kv-summary div { padding: 0.42rem 0; border-top: 1px solid var(--lesson-border); }
+.kv-summary dt { color: var(--lesson-muted); }
+.kv-architecture, .kv-assumptions { margin-top: 0.85rem; }
+.kv-layer-stack { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0.45rem; margin: 0.8rem 0; }
+.kv-layer-stack div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; height: 1rem; }
+.kv-layer-stack i { border-radius: 2px; }
+.kv-explain { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
+.kv-explain h3 { font-size: 0.88rem; font-weight: 600; }
+.kv-equation { font-family: var(--font-mono); }
+.kv-equation strong { color: var(--lesson-gold); }
+.kv-assumptions summary { font-weight: 600; font-size: 0.86rem; cursor: pointer; }
+.kv-assumptions ul { margin: 0.6rem 0 0.63rem 1rem; list-style-type: disc; color: var(--lesson-muted); font-size: 0.79rem; }
+.kv-assumptions li + li { margin-top: 0.36rem; }
+.kv-sources { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; }
+.kv-sources a { color: var(--lesson-blue); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 800px) {
+  .kv-grid, .kv-explain { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kv-segment, .kv-budget-mark { transition: none; }
+}

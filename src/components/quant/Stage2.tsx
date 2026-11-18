@@ -10,10 +10,10 @@ import {
   packNibbles,
   roundToFloat,
   quantRowSym,
-  storageGB,
   twosComplement,
 } from "@/utils/quantization";
-import type { Matrix, QuantConfig, QuantResult } from "@/types/quantization";
+import type { FormatId, Matrix, QuantConfig, QuantResult } from "@/types/quantization";
+import { ModelStorage } from "./LessonReference";
 import { heatStyle } from "./MatrixGrid";
 
 type Cell = [number, number];
@@ -214,7 +214,7 @@ export function Stage2({
         <MathCard info={info} cfg={cfg} sel={sel} result={result} />
       </div>
 
-      <Journey W={W} />
+      <Journey W={W} format={cfg.format} />
 
       <div className="flex justify-between">
         <Button variant="outline" size="lg" onClick={onBack}>
@@ -274,11 +274,12 @@ function NumberLine({
     }
   } else {
     // neighbouring representable values around w
-    const e = Math.floor(Math.log2(Math.abs(w) || 1)),
+    const minExponent = 2 - 2 ** (f.exponentBits! - 1);
+    const e = Math.max(minExponent, Math.floor(Math.log2(Math.abs(deq)))),
       step = 2 ** (e - f.mantissaBits!);
     for (let k = -4; k <= 4; k++)
       ticks.push({
-        v: roundToFloat(deq + k * step, f.mantissaBits!, f.maxValue!),
+        v: roundToFloat(deq + k * step, f.exponentBits!, f.mantissaBits!, f.maxValue!),
         label: k === 0 ? "Ŵ" : undefined,
       });
     lo = ticks[0]!.v - step;
@@ -443,13 +444,13 @@ function MathCard({
                 <Row
                   k="Scale S"
                   formula={
-                    cfg.symmetric ? `α·max|W| / ${p.qmax}` : `α·(max − min) / ${p.qmax - p.qmin}`
+                    cfg.symmetric ? `α·max|W| / ${p.qmax}` : `α·(max(0, max W) − min(0, min W)) / ${p.qmax - p.qmin}`
                   }
                   v={fx(S, 5)}
                 />
                 <Row
                   k="Zero-point Z"
-                  formula={cfg.symmetric ? "symmetric → 0" : "round(qmin − α·min / S)"}
+                  formula={cfg.symmetric ? "symmetric → 0" : "round(qmin − α·min(0, min W) / S)"}
                   v={String(Z)}
                 />
                 <Row
@@ -496,15 +497,15 @@ function MathCard({
                 <Row k="Sign" formula="0 = +, 1 = −" v={String(b.sign)} />
                 <Row
                   k="Exponent"
-                  formula={`stored − bias(${bias})`}
+                  formula={b.exp ? `stored − bias(${bias})` : `1 − bias(${bias})`}
                   v={`${b.exp} → 2^${b.exp ? b.exp - bias : 1 - bias}`}
                 />
                 <Row
                   k="Mantissa"
-                  formula={`1 + m / 2^${f.mantissaBits}`}
+                  formula={`${b.exp ? 1 : 0} + m / 2^${f.mantissaBits}`}
                   v={`${b.man} / ${2 ** f.mantissaBits!}`}
                 />
-                <Row k="Value Ŵ" formula="(−1)^S · 2^E · (1.M)" v={fx(deq, 6)} />
+                <Row k="Value Ŵ" formula={`(−1)^sign · 2^E · (${b.exp ? "1" : "0"}.M)`} v={fx(deq, 6)} />
                 <Row k="Error e" formula="W − Ŵ" v={fx(w - deq, 6)} />
               </>
             );
@@ -516,27 +517,22 @@ function MathCard({
 const TRANSFORMER = [-1.0, -0.8, -0.3, -0.1, 0.1, 0.3, 0.8, 1.0];
 const OUTLIER = [0.01, -0.02, 0.03, -0.04, 0.05, 0.01, 0.02, 1.0];
 
-function Journey({ W }: { W: Matrix }) {
+function Journey({ W, format }: { W: Matrix; format: FormatId }) {
   const [src, setSrc] = useState<"transformer" | "outlier" | "matrix">("transformer");
   const [grouped, setGrouped] = useState(false);
   const [rowIdx, setRowIdx] = useState(0);
   const row = src === "transformer" ? TRANSFORMER : src === "outlier" ? OUTLIER : W[rowIdx]!;
   const groupSize = src === "outlier" && grouped ? 4 : row.length;
   const data = useMemo(() => {
-    const fp16 = row.map((x) => roundToFloat(x, 10, 65504));
-    const bf16 = row.map((x) => roundToFloat(x, 7, 3.39e38));
+    const fp16 = row.map((x) => roundToFloat(x, 5, 10, getFormat("FP16").maxValue!));
+    const bf16 = row.map((x) => roundToFloat(x, 8, 7, getFormat("BF16").maxValue!));
     const i8 = quantRowSym(row, 8),
       i4 = quantRowSym(row, 4, groupSize);
     return { fp16, bf16, i8, i4 };
   }, [row, groupSize]);
   const packed = packNibbles(data.i4.q);
-  const P = 9e9;
-  const bars = [
-    { k: "FP32", v: storageGB(P, 32) },
-    { k: "FP16 / BF16", v: storageGB(P, 16) },
-    { k: "INT8", v: storageGB(P, 8) },
-    { k: "INT4 Group-128", v: storageGB(P, 4, 128) },
-  ];
+  const modelFormats: FormatId[] = ["BF16", "INT8", "INT4"];
+  if (!modelFormats.includes(format)) modelFormats.push(format);
   const Tab = ({ id, l }: { id: typeof src; l: string }) => (
     <button
       onClick={() => setSrc(id)}
@@ -678,28 +674,7 @@ function Journey({ W }: { W: Matrix }) {
             {data.i4.scales.length > 1 && ` + ${data.i4.scales.length} FP16 scales`}
           </p>
         </div>
-        <div className="rounded-lg border bg-card p-5">
-          <h4 className="font-serif text-lg">9B-parameter LLM storage</h4>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Weights only. Group-128 adds one FP16 scale per 128 weights.
-          </p>
-          <div className="space-y-3">
-            {bars.map((b) => (
-              <div key={b.k}>
-                <div className="mb-1 flex justify-between font-mono text-xs">
-                  <span>{b.k}</span>
-                  <span>{Number(b.v.toFixed(2))} GB</span>
-                </div>
-                <div className="h-3 rounded bg-muted">
-                  <div
-                    className="h-3 rounded bg-primary transition-all"
-                    style={{ width: `${(b.v / 36) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ModelStorage initial="FP32" formats={modelFormats} selected={format} />
       </div>
     </div>
   );

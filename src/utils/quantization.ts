@@ -15,7 +15,7 @@ export const FORMATS: FormatSpec[] = [
     bits: 16,
     exponentBits: 8,
     mantissaBits: 7,
-    maxValue: 3.39e38,
+    maxValue: (2 - 2 ** -7) * 2 ** 127,
   },
   {
     id: "FP16",
@@ -84,13 +84,21 @@ export function blockIndexer(g: QuantConfig["granularity"], cols: number) {
   return (r: number, c: number) => r * Math.ceil(cols / 2) + Math.floor(c / 2);
 }
 
-/** Round x to a float format with given mantissa bits (ignores subnormal detail, clamps to max). */
-export function roundToFloat(x: number, mantissaBits: number, maxValue: number) {
-  if (x === 0 || !isFinite(x)) return 0;
-  const e = Math.floor(Math.log2(Math.abs(x)));
-  const step = 2 ** (e - mantissaBits);
-  const v = Math.round(x / step) * step;
-  return Math.max(-maxValue, Math.min(maxValue, v));
+export function floatStep(magnitude: number, exponentBits: number, mantissaBits: number) {
+  const minExponent = 2 - 2 ** (exponentBits - 1);
+  const exponent = Math.max(minExponent, Math.floor(Math.log2(magnitude)));
+  return 2 ** (exponent - mantissaBits);
+}
+
+/** Round to nearest-even with gradual underflow and finite saturation. */
+export function roundToFloat(x: number, exponentBits: number, mantissaBits: number, maxValue: number) {
+  if (x === 0 || Number.isNaN(x)) return x;
+  const magnitude = Math.min(Math.abs(x), maxValue);
+  const step = floatStep(magnitude, exponentBits, mantissaBits);
+  const units = magnitude / step;
+  const lower = Math.floor(units);
+  const rounded = units - lower === 0.5 ? lower + lower % 2 : Math.round(units);
+  return Math.sign(x) * Math.min(maxValue, rounded * step);
 }
 
 export function quantize(W: Matrix, cfg: QuantConfig): QuantResult {
@@ -98,7 +106,7 @@ export function quantize(W: Matrix, cfg: QuantConfig): QuantResult {
   const rows = W.length,
     cols = W[0]!.length;
   if (f.kind === "float") {
-    const q = W.map((row) => row.map((x) => roundToFloat(x, f.mantissaBits!, f.maxValue!)));
+    const q = W.map((row) => row.map((x) => roundToFloat(x, f.exponentBits!, f.mantissaBits!, f.maxValue!)));
     return { q, deq: q, params: null, blockOf: () => 0 };
   }
   const blockOf = blockIndexer(cfg.granularity, cols);
@@ -164,25 +172,23 @@ export const bytesFor = (n: number, bits: number) => (n * bits) / 8;
 /** Encode a value as raw bits for a float format (sign | exponent | mantissa). Value is rounded first. */
 export function encodeFloat(x: number, expBits: number, manBits: number, maxValue: number) {
   const bias = 2 ** (expBits - 1) - 1;
-  const v = roundToFloat(x, manBits, maxValue);
+  const v = roundToFloat(x, expBits, manBits, maxValue);
   const sign = v < 0 || Object.is(v, -0) ? 1 : 0;
   const a = Math.abs(v);
   let exp = 0,
     man = 0;
-  if (a > 0) {
-    let e = Math.floor(Math.log2(a));
+  if (Number.isNaN(a)) {
+    exp = 2 ** expBits - 1;
+    man = 2 ** manBits - 1;
+  } else if (a > 0) {
+    const e = Math.floor(Math.log2(a));
     if (e + bias <= 0) {
       exp = 0;
       man = Math.round(a / 2 ** (1 - bias - manBits));
     } else {
       exp = e + bias;
       man = Math.round((a / 2 ** e - 1) * 2 ** manBits);
-      if (man === 2 ** manBits) {
-        man = 0;
-        exp++;
-      }
     }
-    e = 0;
   }
   const bits = (sign << (expBits + manBits)) | (exp << manBits) | man;
   const total = 1 + expBits + manBits;
