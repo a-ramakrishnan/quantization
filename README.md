@@ -16,7 +16,7 @@ The home page links directly to every walkthrough, lab, experiment, and calculat
 | **Weight comparison** | Play two synchronized lanes through encoding, reconstruction, and the dot product. Start with W8A16 vs. W8A8 and watch identical INT8 weight bits feed different activation and compute paths. |
 | **Basic lab** | Edit small query, key, and value projection matrices. Inspect the stored bits, decoded weights, and how each change affects the output. |
 | **Advanced lab** | Calibrate a 4×4 matrix, choose symmetric or affine quantization, and test per-tensor, per-row, or per-group scales and clipping. Select **Trace one weight** to step through each operation. |
-| **Compression experiment** | Compare dense BF16, dense INT4, and sparse INT4. The byte count includes packed codes, the shared scale, and the sparsity mask. |
+| **Compression experiment** | Compare dense BF16, dense INT4, and sparse INT4. Encode the kept codes with a Huffman tree, decode the packed bytes, and verify the same pruned dot product. Inspect the file and loaded weight sizes, including tree, mask, scale, and padding. |
 | **KV-cache calculator and GPU planner** | Compare Qwen, Llama, GLM, Kimi, MiniMax, Thinking Machines Inkling, and Ai2 Olmo. Set active users and precision, compare required GPUs across context lengths, and explore published serving measurements. |
 
 ## A weight’s journey

@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { basicProjection } from "@/utils/basic-quantization";
 import { matVec, quantize } from "@/utils/quantization";
 import { traceNumber } from "./gpu-weight-trace";
-import { INPUT, PROJECTIONS, WEIGHTS } from "./lesson-example";
+import { INPUT, PROJECTIONS } from "./lesson-example";
+import { CompressionRoundTrip } from "./CompressionRoundTrip";
 
 const MIN_WEIGHT = 0.46875;
 const MAX_WEIGHT = 0.65625;
@@ -49,14 +51,19 @@ export function RoundingBoundary() {
   );
 }
 
-const PRUNE_ORDER = WEIGHTS.flat().map((value, index) => ({ value, index }))
-  .sort((a, b) => Math.abs(a.value) - Math.abs(b.value))
-  .map(({ index }) => index);
+const compressionBlocks = {
+  lesson: PROJECTIONS.INT4,
+  repeated: basicProjection([[0.5, 0.5, 0.25, 0.5], [0.25, -0.375, 0.875, 0.5]], INPUT, "INT4"),
+};
 
 export function CompressionExperiment() {
   const [pruned, setPruned] = useState(4);
-  const projection = PROJECTIONS.INT4;
-  const mask = projection.source.flat().map((_, i) => !PRUNE_ORDER.slice(0, pruned).includes(i));
+  const [block, setBlock] = useState<keyof typeof compressionBlocks>("lesson");
+  const projection = compressionBlocks[block];
+  const prunedPositions = projection.source.flat().map((value, index) => ({ value, index }))
+    .sort((a, b) => Math.abs(a.value) - Math.abs(b.value))
+    .slice(0, pruned).map(({ index }) => index);
+  const mask = projection.source.flat().map((_, index) => !prunedPositions.includes(index));
   const kept = mask.length - pruned;
   const codeBytes = Math.ceil(kept / 2);
   const maskBytes = Math.ceil(mask.length / 8);
@@ -68,6 +75,10 @@ export function CompressionExperiment() {
     <section id="compression" className="lesson-reference lesson-experiment" aria-labelledby="compression-title">
       <h3 id="compression-title">Quantization, sparsity, and compression</h3>
       <p>Quantization uses fewer bits per weight. Pruning sets selected weights to zero. A sparse encoding can omit those zeros and store a mask so the decoder knows where they belong.</p>
+      <div className="experiment-buttons" role="group" aria-label="Compression weight block">
+        <button type="button" aria-pressed={block === "lesson"} onClick={() => { setBlock("lesson"); setPruned(4); }}>Lesson weights</button>
+        <button type="button" aria-pressed={block === "repeated"} onClick={() => { setBlock("repeated"); setPruned(0); }}>Weights with repeated codes</button>
+      </div>
       <label className="experiment-range">
         <span>Prune lowest-magnitude weights <strong>{pruned} of {mask.length}</strong></span>
         <input type="range" min={0} max={6} step={2} value={pruned} aria-label="Number of weights pruned"
@@ -85,7 +96,8 @@ export function CompressionExperiment() {
       </dl>
       <p className="experiment-equation">{codeBytes} B packed codes + {maskBytes} B mask + {projection.scaleBytes} B scale = <strong>{sparseBytes} B</strong> · mask {mask.map(Number).join("")}</p>
       <p>The sparse row 1 output is {traceNumber(sparseOutput)}. The original BF16-weight output is {traceNumber(projection.baseline[0]!)}. Sparse storage pays for position metadata, and skipping pruned weights during inference requires a compatible kernel.</p>
-      <p>Entropy coding can further compress a serialized model. It encodes the remaining symbols losslessly. <a href="https://hanlab.mit.edu/projects/deep-compression">Han et al., Deep Compression</a></p>
+      <CompressionRoundTrip key={`${block}-${pruned}`} projection={projection} mask={mask} sparseOutput={sparseOutput} />
+      <p><a href="https://hanlab.mit.edu/projects/deep-compression">Han et al., Deep Compression</a></p>
     </section>
   );
 }
