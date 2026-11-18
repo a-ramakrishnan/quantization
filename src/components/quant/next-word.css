@@ -57,6 +57,22 @@
 .next-word-stage .next-word-equation { margin-top: 0.65rem; color: var(--lesson-muted); font: 0.74rem var(--font-mono); overflow-wrap: anywhere; }
 .next-word-controls label { display: grid; gap: 0.25rem; flex: 1 1 11rem; font-size: 0.76rem; }
 .next-word-controls input { width: 100%; accent-color: var(--lesson-gold); }
+.next-word-explanation { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--lesson-border); }
+.next-word-explanation summary { cursor: pointer; color: var(--lesson-blue); font-weight: 600; }
+.next-word-explanation dl { display: grid; gap: 0.5rem; margin-block: 0.75rem; }
+.next-word-explanation dt { color: var(--lesson-gold); }
+.next-word-explanation dd { font: 0.74rem var(--font-mono); overflow-wrap: anywhere; }
+.next-word-branches { margin-top: 1rem; }
+.next-word-branches .next-word-math { margin: 0.9rem 0 0; }
+.next-word-branches .next-word-branch-result {
+  font: 400 clamp(1.35rem, 3vw, 1.85rem)/1.16 "Instrument Serif", Georgia, serif;
+  white-space: pre-wrap; overflow-wrap: anywhere; color: var(--lesson-text);
+}
+.next-word-branch-result strong { color: var(--lesson-gold); font-weight: inherit; }
+@media (prefers-reduced-motion: no-preference) {
+  .next-word-branch-result strong { animation: next-word-reveal 260ms ease-out both; }
+  @keyframes next-word-reveal { from { opacity: 0; } to { opacity: 1; } }
+}
 @media (max-width: 650px) {
   .next-word-math { grid-template-columns: minmax(0, 1fr); }
 }
